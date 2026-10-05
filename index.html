@@ -126,7 +126,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
           </div>
           <div class="hud-bottom">
             <span class="hint">드래그 회전 · 휠 줌</span>
-            <div class="seg"><button id="autoRot" aria-pressed="true">자동 회전</button></div>
+            <div class="seg"><button id="autoRot" aria-pressed="true">자동 회전</button><button id="sound" aria-pressed="true" title="효과음 켜기/끄기">소리</button></div>
           </div>
         </div>
       </section>
@@ -167,7 +167,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
       <hr>
       <div>
         <h2><span class="n">02</span>추첨</h2>
-        <p>투입 → 송풍 혼합 5초 → 상단 흡입구로 7개(6 + 보너스). 고정 타임스텝이므로 같은 순서는 항상 같은 번호를 냅니다.</p>
+        <p>투입 → 송풍 혼합 5초 → 제트에 실려 상단 깔때기로 올라온 공이 게이트를 통과하면 1개 추첨, 송풍 정지·재혼합을 반복해 7개(6 + 보너스). 고정 타임스텝이므로 같은 순서는 항상 같은 번호를 냅니다.</p>
       </div>
       <button class="btn primary" id="start" disabled>추첨 시작</button>
       <button class="btn wide" id="rerun" disabled>같은 순서로 다시 추첨 (재현 확인)</button>
@@ -180,7 +180,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
           <li><b>단일 시드</b>: 투입 순서 배열을 <code>FNV-1a</code> 32비트로 해시해 모든 절차적 요소(투입 미세 오프셋, 난류장)의 시드로 씁니다.</li>
           <li><b>정수 해시 value noise</b>로 3D 난류장을 만듭니다. <code>sin/cos/exp</code>를 쓰지 않고 <code>imul</code>·IEEE 기본 연산·<code>sqrt</code>만 사용해 재현성을 확보했습니다.</li>
           <li><b>공기장</b> = 중앙 상승 제트(유리함수 코어) + 바닥 유입류 + 노이즈 난류, 공은 선형 드래그 <code>a = k(u − v)</code>로 끌려갑니다.</li>
-          <li><b>충돌</b>: 구–구 임펄스(<code>e = 0.55</code>) + 위치 보정, 유리구 내벽, 흡입 튜브 벽, 게이트 덮개. 45개라 O(n²)로 충분합니다.</li>
+          <li><b>충돌</b>: 구–구 임펄스(<code>e = 0.55</code>) + 위치 보정, 유리구 내벽, 깔때기 안팎 면, 배출 목 벽, 게이트 덮개. 인위적 흡입력 없이 공기 드래그와 충돌만으로 배출됩니다. 45개라 O(n²)로 충분합니다.</li>
           <li><b>프로시저럴 에셋</b>: 번호공 텍스처는 실행 시 캔버스로 생성, 지오메트리는 모두 원시 도형. 외부 에셋 0개, 렌더러만 Three.js.</li>
         </ul>
       </details>
@@ -211,11 +211,139 @@ function vnoise(x,y,z,s){
     lerp(lerp(ih(xi,yi,zi+1,s),ih(xi+1,yi,zi+1,s),fx),lerp(ih(xi,yi+1,zi+1,s),ih(xi+1,yi+1,zi+1,s),fx),fy),fz);
 }
 
+/* ---------- procedural sound (Web Audio, synthesized at runtime, no samples) ---------- */
+const SFX=(function(){
+  let ctx=null, master=null, noiseBuf=null, humGain=null, on=true, panOK=false;
+  try{on=localStorage.getItem('lotto-sfx')!=='off';}catch(e){}
+  const ev=[];                                   /* discrete events pushed by the sim: drop / gate / suck */
+  let hitE=0,hitN=0,hitMax=0,hitX=0,hitZ=0;      /* ball–ball impacts accumulated across this frame's steps */
+  let wallE=0,wallN=0,wallMax=0,wallX=0,wallZ=0; /* ball–glass impacts */
+  const NOTES=[523.25,587.33,659.25,783.99,880,1046.5,1318.5]; /* C D E G A C E — one per tray slot */
+
+  function hit(v,x,z){ if(v<0.5)return; hitE+=v;hitN++; if(v>hitMax){hitMax=v;hitX=x;hitZ=z;} }
+  function wall(v,x,z){ if(v<0.8)return; wallE+=v;wallN++; if(v>wallMax){wallMax=v;wallX=x;wallZ=z;} }
+
+  function ensure(){
+    if(ctx)return true;
+    const AC=window.AudioContext||window.webkitAudioContext; if(!AC)return false;
+    try{ctx=new AC();}catch(e){return false;}
+    panOK=typeof ctx.createStereoPanner==='function';
+    master=ctx.createGain(); master.gain.value=on?1:0;
+    const comp=ctx.createDynamicsCompressor(); comp.threshold.value=-16; comp.knee.value=12; comp.ratio.value=5; comp.attack.value=0.003; comp.release.value=0.12;
+    master.connect(comp); comp.connect(ctx.destination);
+    const len=ctx.sampleRate*2, buf=ctx.createBuffer(1,len,ctx.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+    noiseBuf=buf;
+    /* blower: looped noise → lowpass (air) + bandpass (duct resonance) + low sine (motor) */
+    humGain=ctx.createGain(); humGain.gain.value=0; humGain.connect(master);
+    const n=ctx.createBufferSource(); n.buffer=noiseBuf; n.loop=true;
+    const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=520; lp.Q.value=0.7;
+    const bp=ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=170; bp.Q.value=2.5;
+    const bpG=ctx.createGain(); bpG.gain.value=1.6;
+    n.connect(lp); lp.connect(humGain); n.connect(bp); bp.connect(bpG); bpG.connect(humGain); n.start();
+    const motor=ctx.createOscillator(); motor.type='triangle'; motor.frequency.value=96;
+    const mG=ctx.createGain(); mG.gain.value=0.09; motor.connect(mG); mG.connect(humGain);
+    const lfo=ctx.createOscillator(); lfo.frequency.value=0.9; const lfoG=ctx.createGain(); lfoG.gain.value=3; lfo.connect(lfoG); lfoG.connect(motor.frequency); lfo.start(); motor.start();
+    return true;
+  }
+  function unlock(){ if(!ensure())return; if(ctx.state==='suspended')ctx.resume().catch(()=>{}); }
+
+  /* pan from world position relative to the camera azimuth (right vector = (cos az, 0, −sin az)) */
+  function panOf(x,z){ const az=cam.az; return Math.max(-1,Math.min(1,(x*Math.cos(az)-z*Math.sin(az))/R))*0.7; }
+  function out(pan){ if(!panOK)return master; const p=ctx.createStereoPanner(); p.pan.value=Math.max(-1,Math.min(1,pan)); p.connect(master); return p; }
+
+  /* one filtered noise burst: amp, bandpass freq, Q, decay (s), start time, pan */
+  function burst(amp,freq,q,dec,t,pan){
+    const src=ctx.createBufferSource(); src.buffer=noiseBuf; src.playbackRate.value=0.8+Math.random()*0.4;
+    const f=ctx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=freq; f.Q.value=q;
+    const g=ctx.createGain(); g.gain.setValueAtTime(amp,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dec);
+    src.connect(f); f.connect(g); g.connect(out(pan)); src.start(t,Math.random()*1.5); src.stop(t+dec+0.02);
+  }
+  /* one decaying tone */
+  function tone(amp,freq,dec,t,pan,type,f2){
+    const o=ctx.createOscillator(); o.type=type||'sine'; o.frequency.setValueAtTime(freq,t);
+    if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+dec);
+    const g=ctx.createGain(); g.gain.setValueAtTime(amp,t); g.gain.exponentialRampToValueAtTime(0.0005,t+dec);
+    o.connect(g); g.connect(out(pan)); o.start(t); o.stop(t+dec+0.02);
+  }
+
+  function clickBB(v,t,pan){            /* plastic ball on plastic ball */
+    const a=Math.min(1,v/14);
+    burst(0.05+0.32*a,2600+1800*a+Math.random()*700,5,0.035+0.025*a,t,pan);
+    tone(0.03*a+0.002,1900+Math.random()*600,0.03,t,pan,'sine');
+  }
+  function thunkWall(v,t,pan){          /* ball on acrylic shell / floor */
+    const a=Math.min(1,v/16);
+    burst(0.06+0.3*a,900+500*a,3,0.07+0.05*a,t,pan);
+    tone(0.05+0.12*a,620+140*a,0.09,t,pan,'sine',480);
+  }
+  function drop(t){                     /* ball dropped into the top tube */
+    burst(0.18,1400,4,0.06,t,0); tone(0.14,560,0.09,t,0,'sine',240);
+  }
+  function gate(t){                     /* gate lid sliding open */
+    burst(0.3,700,2,0.18,t,0); burst(0.22,3200,6,0.04,t+0.16,0); tone(0.08,220,0.2,t,0,'triangle',160);
+  }
+  function suck(t){                     /* ball pulled up the suction tube: rising whoosh + zip */
+    const src=ctx.createBufferSource(); src.buffer=noiseBuf; src.loop=true;
+    const f=ctx.createBiquadFilter(); f.type='bandpass'; f.Q.value=1.6;
+    f.frequency.setValueAtTime(420,t); f.frequency.exponentialRampToValueAtTime(3200,t+0.55);
+    const g=ctx.createGain(); g.gain.setValueAtTime(0.0005,t); g.gain.exponentialRampToValueAtTime(0.5,t+0.18); g.gain.exponentialRampToValueAtTime(0.0005,t+0.75);
+    src.connect(f); f.connect(g); g.connect(master); src.start(t,Math.random()); src.stop(t+0.8);
+    const o=ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(330,t); o.frequency.exponentialRampToValueAtTime(1100,t+0.45);
+    const og=ctx.createGain(); og.gain.setValueAtTime(0.0005,t); og.gain.exponentialRampToValueAtTime(0.12,t+0.1); og.gain.exponentialRampToValueAtTime(0.0005,t+0.5);
+    o.connect(og); og.connect(master); o.start(t); o.stop(t+0.55);
+    burst(0.25,2400,5,0.05,t,0);        /* the lid click as it closes behind the ball */
+  }
+  function land(slot,t){                /* ball settles in the tray: bell note climbing per slot */
+    const f=NOTES[Math.min(slot,NOTES.length-1)], pan=0.35;
+    tone(0.28,f,0.9,t,pan,'sine'); tone(0.09,f*2.01,0.5,t,pan,'sine'); tone(0.05,f*3.03,0.25,t,pan,'sine');
+    burst(0.2,2200,4,0.04,t,pan);
+    if(slot>=DRAW-1)fanfare(t+0.25);
+  }
+  function fanfare(t){                  /* all seven drawn */
+    const seq=[523.25,659.25,783.99,1046.5], end=t+0.42;
+    seq.forEach((f,i)=>tone(0.22,f,0.5,t+i*0.09,0,'triangle'));
+    [523.25,659.25,783.99,1046.5,1318.5].forEach(f=>{tone(0.16,f,1.8,end,0,'sine');tone(0.05,f*2,1.2,end,0,'sine');});
+  }
+
+  /* called once per rendered frame, after all physics steps of that frame ran */
+  function flush(dt){
+    const live=ctx&&on&&ctx.state==='running';
+    if(!live){ev.length=0;hitE=hitN=hitMax=0;wallE=wallN=wallMax=0;if(humGain)humGain.gain.setTargetAtTime(0,ctx.currentTime,0.1);return;}
+    const t0=ctx.currentTime, span=Math.max(0.004,Math.min(dt,0.05));
+    /* blower hum follows the air jet */
+    humGain.gain.setTargetAtTime(S.air?0.34:0,t0,S.air?0.35:0.5);
+    /* discrete events */
+    for(const e of ev){ if(e.k==='drop')drop(t0+Math.random()*span); else if(e.k==='gate')gate(t0); else if(e.k==='suck')suck(t0); }
+    ev.length=0;
+    /* impacts: a few voices per frame, scattered inside the frame; density raises loudness */
+    if(hitN){
+      const k=Math.min(3,hitN), dens=Math.min(1,0.45+hitN/14), avg=hitE/hitN;
+      for(let i=0;i<k;i++){const v=(i===0?hitMax:avg*(0.6+Math.random()*0.8))*dens; clickBB(v,t0+Math.random()*span,panOf(hitX,hitZ)+(Math.random()-0.5)*0.4);}
+    }
+    if(wallN){
+      const k=Math.min(2,wallN), avg=wallE/wallN;
+      for(let i=0;i<k;i++){const v=i===0?wallMax:avg*(0.6+Math.random()*0.8); thunkWall(v,t0+Math.random()*span,panOf(wallX,wallZ)+(Math.random()-0.5)*0.3);}
+    }
+    hitE=hitN=hitMax=0;wallE=wallN=wallMax=0;
+  }
+  function landAt(slot){ if(ctx&&on&&ctx.state==='running')land(slot,ctx.currentTime); }
+  function toggle(){
+    on=!on; try{localStorage.setItem('lotto-sfx',on?'on':'off');}catch(e){}
+    if(on)unlock();
+    if(master)master.gain.setTargetAtTime(on?1:0,ctx.currentTime,0.05);
+    return on;
+  }
+  return {ev,hit,wall,unlock,flush,toggle,land:landAt,get on(){return on;}};
+})();
+
 /* ---------- physics constants (1 unit ≈ 10 cm) ---------- */
 const R=3.2, BR=0.32, G=98, DT=1/240, REST=0.55;
 const HOLE=0.55, TUBE_IN=HOLE-BR*0.5, LID=R-0.25, FLOOR_Y=-4.65;
-const JET_U=44, JET_W=1.2, DRAG=5, TURB=8, SUCK=60;
-const T_INSERT=0.11, T_MIX=5.0, T_GATE=1.1, EXIT_T=1.3, SLIDE_T=0.35;
+const JET_U=44, JET_W=1.2, DRAG=5, TURB=8;
+/* inlet funnel hanging from the top opening: mouth radius FR0 at height FY0, throat radius HOLE at LID */
+const FY0=LID-1.15, FR0=1.1, FK=(FR0-HOLE)/(LID-FY0), FNI=1/Math.sqrt(1+FK*FK);
+const T_INSERT=0.11, T_MIX=5.0, T_SETTLE=1.2, T_GATE=0.0, EXIT_T=1.3, SLIDE_T=0.35;
 const TRAY=new THREE.Vector3(3.5,-3.23,1.55), SLOT_DX=0.74;
 
 const S={
@@ -235,7 +363,8 @@ function resetSim(){
 
 function capture(i){
   S.st[i]=2;S.exitT[i]=0;S.slot[i]=S.drawn.length;S.drawn.push(S.order[i]);
-  S.gateOpen=false;S.gateTimer=T_GATE;
+  S.gateOpen=false;S.gateTimer=T_SETTLE+T_GATE;
+  SFX.ev.push({k:'suck',n:S.order[i]});
   if(S.drawn.length>=DRAW){S.phase='done';S.doneAt=S.t;}
 }
 
@@ -246,15 +375,15 @@ function step(){
       const k=S.inserted;
       S.px[k]=ih(k,11,7,seed)*0.08; S.pz[k]=ih(k,13,5,seed)*0.08; S.py[k]=R+1.0;
       S.vx[k]=ih(k,17,3,seed)*0.3; S.vz[k]=ih(k,19,2,seed)*0.3; S.vy[k]=-2;
-      S.st[k]=1; S.inserted++;
+      S.st[k]=1; S.inserted++; SFX.ev.push({k:'drop'});
     }
     if(S.inserted>=N && t>=N*T_INSERT+1.0){S.phase='mixing';S.mixStart=t;}
   }else if(S.phase==='mixing'){
-    if(t-S.mixStart>=T_MIX){S.phase='drawing';S.gateOpen=true;}
+    if(t-S.mixStart>=T_MIX){S.phase='drawing';S.gateOpen=false;S.gateTimer=T_SETTLE+T_GATE;}
   }else if(S.phase==='drawing'){
-    if(!S.gateOpen){S.gateTimer-=DT;if(S.gateTimer<=0)S.gateOpen=true;}
+    if(!S.gateOpen){S.gateTimer-=DT;if(S.gateTimer<=0){S.gateOpen=true;SFX.ev.push({k:'gate'});}}
   }
-  const air=S.phase==='mixing'||S.phase==='drawing'||(S.phase==='done'&&t-S.doneAt<1.5);
+  const air=S.phase==='mixing'||(S.phase==='drawing'&&(S.gateOpen||S.gateTimer<=T_GATE))||(S.phase==='done'&&t-S.doneAt<1.5);
   S.air=air;
   const px=S.px,py=S.py,pz=S.pz,vx=S.vx,vy=S.vy,vz=S.vz,st=S.st;
 
@@ -273,10 +402,6 @@ function step(){
       uy+=TURB*0.8*vnoise(x*f,y*f+nt,z*f,seed^0x5bd1e995);
       uz+=TURB*vnoise(x*f,y*f,z*f+nt,seed^0x27d4eb2f);
       ax+=DRAG*(ux-vx[i]);ay+=DRAG*(uy-vy[i]);az+=DRAG*(uz-vz[i]);
-      if(S.gateOpen&&S.phase==='drawing'&&y>R*0.3&&hd2<2.6){
-        const dx=-x,dy=R-y,dz=-z;const d=Math.sqrt(dx*dx+dy*dy+dz*dz)+1e-6;const s=SUCK/d;
-        ax+=dx*s;ay+=dy*s;az+=dz*s;
-      }
     }else{ax-=1.5*vx[i];ay-=1.5*vy[i];az-=1.5*vz[i];}
     vx[i]+=ax*DT;vy[i]+=ay*DT;vz[i]+=az*DT;
     px[i]+=vx[i]*DT;py[i]+=vy[i]*DT;pz[i]+=vz[i]*DT;
@@ -294,11 +419,11 @@ function step(){
       const d=Math.sqrt(d2),nx=dx/d,ny=dy/d,nz=dz/d,pen=(D-d)*0.5;
       px[i]-=nx*pen;py[i]-=ny*pen;pz[i]-=nz*pen;px[j]+=nx*pen;py[j]+=ny*pen;pz[j]+=nz*pen;
       const vr=(vx[j]-vx[i])*nx+(vy[j]-vy[i])*ny+(vz[j]-vz[i])*nz;
-      if(vr<0){const J=-(1+REST)*vr*0.5;vx[i]-=J*nx;vy[i]-=J*ny;vz[i]-=J*nz;vx[j]+=J*nx;vy[j]+=J*ny;vz[j]+=J*nz;}
+      if(vr<0){const J=-(1+REST)*vr*0.5;vx[i]-=J*nx;vy[i]-=J*ny;vz[i]-=J*nz;vx[j]+=J*nx;vy[j]+=J*ny;vz[j]+=J*nz;SFX.hit(-vr,px[i],pz[i]);}
     }
   }
 
-  /* walls: glass sphere, top tube, gate lid, floor */
+  /* walls: glass sphere, inlet funnel, throat tube, gate lid, floor */
   for(let i=0;i<N;i++){
     if(st[i]!==1)continue;
     const x=px[i],y=py[i],z=pz[i],hd2=x*x+z*z;
@@ -314,7 +439,7 @@ function step(){
           const nx=x/d,ny=y/d,nz=z/d,pen=d+BR-R;
           px[i]-=nx*pen;py[i]-=ny*pen;pz[i]-=nz*pen;
           const vn=vx[i]*nx+vy[i]*ny+vz[i]*nz;
-          if(vn>0){vx[i]-=(1+REST)*vn*nx;vy[i]-=(1+REST)*vn*ny;vz[i]-=(1+REST)*vn*nz;}
+          if(vn>0){vx[i]-=(1+REST)*vn*nx;vy[i]-=(1+REST)*vn*ny;vz[i]-=(1+REST)*vn*nz;SFX.wall(vn,x,z);}
           vx[i]*=0.995;vy[i]*=0.995;vz[i]*=0.995;
         }
       }else if(d<R+BR){
@@ -323,7 +448,18 @@ function step(){
         const vn=vx[i]*nx+vy[i]*ny+vz[i]*nz;
         if(vn<0){vx[i]-=(1+REST)*vn*nx;vy[i]-=(1+REST)*vn*ny;vz[i]-=(1+REST)*vn*nz;}
       }
-      if(py[i]<FLOOR_Y+BR){py[i]=FLOOR_Y+BR;if(vy[i]<0)vy[i]=-vy[i]*REST;}
+      if(py[i]<FLOOR_Y+BR){py[i]=FLOOR_Y+BR;if(vy[i]<0){SFX.wall(-vy[i],x,z);vy[i]=-vy[i]*REST;}}
+      /* funnel: inverted cone r(y)=HOLE+FK*(LID-y); signed distance sd>0 outside the wall */
+      if(y>FY0-BR&&y<LID+BR){
+        const hd=Math.sqrt(hd2)+1e-9, r=HOLE+FK*(LID-y), sd=(hd-r)*FNI;
+        if(sd>-BR&&sd<BR){
+          const nx=x/hd*FNI, ny=FK*FNI, nz=z/hd*FNI;        /* outward normal of the cone */
+          const sgn=sd<0?-1:1, pen=BR-sgn*sd;                 /* push inward when inside, outward when outside */
+          px[i]+=sgn*nx*pen;py[i]+=sgn*ny*pen;pz[i]+=sgn*nz*pen;
+          const vn=vx[i]*nx+vy[i]*ny+vz[i]*nz;
+          if(vn*sgn<0){vx[i]-=(1+REST)*vn*nx;vy[i]-=(1+REST)*vn*ny;vz[i]-=(1+REST)*vn*nz;SFX.wall(Math.abs(vn),x,z);}
+        }
+      }
     }
   }
   for(let i=0;i<N;i++){if(st[i]===2){S.exitT[i]+=DT;if(S.exitT[i]>=EXIT_T+SLIDE_T)st[i]=3;}}
@@ -367,6 +503,12 @@ nozzle.position.y=-R+0.2;scene.add(nozzle);
 const airCone=new THREE.Mesh(new THREE.ConeGeometry(1.0,2.6,32,1,true),new THREE.MeshBasicMaterial({color:0xfbc400,transparent:true,opacity:0.08,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));
 airCone.rotation.x=Math.PI;airCone.position.y=-R+1.6;airCone.visible=false;airCone.renderOrder=11;scene.add(airCone);
 
+const funnel=new THREE.Mesh(new THREE.CylinderGeometry(HOLE,FR0,LID-FY0,48,1,true),new THREE.MeshPhysicalMaterial({
+  color:0xd6e6ff,transparent:true,opacity:0.3,roughness:0.08,clearcoat:1,side:THREE.DoubleSide,depthWrite:false
+}));
+funnel.position.y=(LID+FY0)/2;funnel.renderOrder=11;scene.add(funnel);
+const mouth=new THREE.Mesh(new THREE.TorusGeometry(FR0+0.02,0.05,10,64),metal);
+mouth.rotation.x=Math.PI/2;mouth.position.y=FY0;scene.add(mouth);
 const rim=new THREE.Mesh(new THREE.TorusGeometry(HOLE+0.08,0.07,12,48),metal);
 rim.rotation.x=Math.PI/2;rim.position.y=R-0.05;scene.add(rim);
 const lid=new THREE.Mesh(new THREE.CylinderGeometry(HOLE+0.02,HOLE+0.02,0.06,32),new THREE.MeshStandardMaterial({color:0xfbc400,metalness:0.4,roughness:0.4}));
@@ -431,7 +573,7 @@ function sync(dtv){
       m.quaternion.slerp(identQ,0.12);
     }else{
       m.position.copy(slotPos(S.slot[i]));m.quaternion.copy(identQ);
-      if(!shown[i]){shown[i]=1;showResult(S.slot[i],S.order[i]);}
+      if(!shown[i]){shown[i]=1;showResult(S.slot[i],S.order[i]);SFX.land(S.slot[i]);}
     }
   }
   lid.position.x=lerp(lid.position.x,S.gateOpen?HOLE*2.2:0,0.18);
@@ -455,6 +597,10 @@ const endDrag=()=>{cam.drag=false;};
 canvas.addEventListener('pointerup',endDrag);canvas.addEventListener('pointercancel',endDrag);
 canvas.addEventListener('wheel',e=>{e.preventDefault();cam.dist=Math.min(20,Math.max(6.5,cam.dist*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
 $('#autoRot').addEventListener('click',e=>{cam.auto=!cam.auto;e.currentTarget.setAttribute('aria-pressed',String(cam.auto));});
+const soundBtn=$('#sound');
+function soundLabel(){soundBtn.setAttribute('aria-pressed',String(SFX.on));soundBtn.textContent=SFX.on?'\u{1F50A} 소리':'\u{1F507} 소리';}
+soundBtn.addEventListener('click',()=>{SFX.toggle();soundLabel();});
+soundLabel();
 
 function resize(){
   const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;
@@ -512,6 +658,7 @@ function showResult(k,n){
 
 function startDraw(){
   if(order.length!==N)return;
+  SFX.unlock();
   S.order=order.slice();S.seed=fnv1a(S.order);
   resetSim();
   for(let i=0;i<N;i++){meshes[i].material.map=ballTexture(S.order[i]);meshes[i].material.needsUpdate=true;meshes[i].quaternion.identity();}
@@ -521,7 +668,7 @@ function startDraw(){
 }
 startBtn.addEventListener('click',startDraw);
 rerunBtn.addEventListener('click',()=>{if(S.phase==='done')startDraw();});
-$('#reset').addEventListener('click',()=>{S.phase='idle';resetSim();S.order=[];meshes.forEach(m=>m.visible=false);slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='아직 추첨 전';lid.position.x=0;renderOrder();});
+$('#reset').addEventListener('click',()=>{S.phase='idle';resetSim();SFX.ev.length=0;S.order=[];meshes.forEach(m=>m.visible=false);slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='아직 추첨 전';lid.position.x=0;renderOrder();});
 $('#speed').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.speed=+b.dataset.s;[...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed',String(x===b)));});
 
 /* HUD */
@@ -534,7 +681,7 @@ function hud(){
     case 'idle':m='투입 순서를 정한 뒤 추첨을 시작하세요';break;
     case 'loading':m='공 투입 중 · '+S.inserted+' / '+N;break;
     case 'mixing':m='송풍 혼합 중 · '+Math.max(0,T_MIX-(S.t-S.mixStart)).toFixed(1)+' s 남음';break;
-    case 'drawing':m='추첨 중 · '+S.drawn.length+' / '+DRAW+(S.gateOpen?' · 게이트 열림':' · 게이트 닫힘');break;
+    case 'drawing':m='추첨 중 · '+S.drawn.length+' / '+DRAW+(S.gateOpen?' · 게이트 열림':S.air?' · 게이트 닫힘 · 재혼합':' · 송풍 정지 · 공 낙하');break;
     default:m='추첨 완료 · 6 + 보너스 1';
   }
   if(m!==lastMain){statusMain.textContent=lastMain=m;}
@@ -553,7 +700,7 @@ function frame(now){
     S.acc+=dt*S.speed;let n=Math.floor(S.acc/DT);if(n>2400)n=2400;S.acc-=n*DT;
     for(let i=0;i<n;i++)step();
   }
-  sync(dt*S.speed);updateCamera(dt);renderer.render(scene,camera);hud();
+  SFX.flush(dt);sync(dt*S.speed);updateCamera(dt);renderer.render(scene,camera);hud();
 }
 
 /* boot (hot-update aware) */
