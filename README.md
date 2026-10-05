@@ -1,28 +1,34 @@
-# 에어믹스 로또 추첨기 (Air-mix Lotto Draw)
+# Air-Mix Lotto Draw
 
-웹 기반 3D 물리 시뮬레이션 로또 6/45 추첨기. 공을 기계에 넣는 **투입 순서**만을 입력으로 받아,
-고정 타임스텝 강체 시뮬레이션으로 6개 + 보너스 1개를 뽑습니다. 같은 순서는 항상 같은 번호를 냅니다.
+A web-based 3D physics simulation of a Lotto 6/45 air-mix drawing machine. The only input is the
+**order in which the balls are loaded** into the machine; a fixed-timestep rigid-body simulation then
+draws 6 numbers plus 1 bonus. The same loading order always produces the same numbers.
 
-데모: `index.html`을 브라우저로 열면 됩니다 (의존성은 cdnjs의 Three.js r128 하나).
+Demo: open `index.html` in a browser (the only dependency is Three.js r128 from cdnjs).
+Shareable Claude artifact: https://claude.ai/artifact/Y17gnniYFi5Rc3AyJusXQi
 
-## 동작
+## How it works
 
-1. 1~45번 공을 기계에 넣을 순서대로 선택 (직접 입력 / 오름차순 / 무작위 채우기)
-2. 추첨 시작 → 상단 튜브로 공 투입 → 송풍 혼합 5초
-3. 송풍 정지 1.2초(깔때기 비움) → 송풍 재개와 동시에 게이트 개방 → 제트에 실려 깔때기로 들어온 공이 배출 목을 통과하면 1개 추첨, 게이트 닫힘. 7회 반복 (6개 정렬 + 보너스)
-4. "같은 순서로 다시 추첨"으로 재현성 확인
+1. Pick balls 1–45 in the order they go into the machine (type them, fill ascending, or fill shuffled)
+2. Start the draw → balls drop in through the top tube → 5 s of air mixing
+3. Blower pauses 1.2 s so the funnel empties → blower restarts and the gate opens at the same moment →
+   a ball carried up the jet into the inlet funnel and through the throat is drawn, and the gate closes.
+   Repeats 7 times (6 sorted + bonus)
+4. "Draw again with the same order" verifies the replay
+5. When the seventh ball lands, an overlay shows the winning numbers in large type with a copy button
+   (numbers, draw order, seed, loading order and page URL)
 
-## 64k 인트로 기법
+## 64k-intro techniques
 
-- **단일 시드**: 투입 순서 배열을 FNV-1a 32비트로 해시해 모든 절차적 요소의 시드로 사용
-- **정수 해시 value noise**: `sin/cos/exp` 없이 `Math.imul`과 IEEE 기본 연산, `sqrt`만 사용 → 브라우저 간 재현성
-- **고정 타임스텝** `dt = 1/240 s`: 프레임레이트와 속도 배율은 스텝 수만 바꾸고 결과엔 영향 없음
-- **공기장** = 중앙 상승 제트(유리함수 코어) + 바닥 유입류 + 3D 노이즈 난류, 공은 선형 드래그 `a = k(u − v)`
-- **충돌**: 구–구 임펄스(e = 0.55) + 위치 보정, 유리구 내벽, 깔때기 안팎 면(원뿔 부호 거리), 배출 목 벽, 게이트 덮개
-- **추첨은 순수 물리**: 인위적 흡입력 없음. 중앙 상승 제트의 드래그가 공을 깔때기로 밀어 올리고, 목을 통과한 공만 배출. 공이 올라오는 시점은 혼합 상태에 따라 달라짐
-- **프로시저럴 에셋**: 번호공 텍스처는 실행 시 캔버스로 생성, 지오메트리는 모두 원시 도형, 외부 에셋 0개
-- **프로시저럴 사운드**: Web Audio로 실행 시 합성 (샘플 파일 0개). 공끼리/유리벽 충돌음은 충돌 속도에 따라 음량·음색이 바뀌고 카메라 기준으로 좌우 패닝, 송풍기 바람 소리는 공기 제트와 함께 페이드, 공 흡입 시 상승 휘슬, 트레이 안착 시 슬롯마다 올라가는 벨 음, 7개 완료 시 팡파레
+- **Single seed**: the loading order is hashed with 32-bit FNV-1a and seeds every procedural element
+- **Integer-hash value noise**: no `sin/cos/exp`; only `Math.imul`, basic IEEE arithmetic and `sqrt`, so results replay identically across browsers
+- **Fixed timestep** `dt = 1/240 s`: frame rate and speed multiplier only change how many steps run per frame, never the outcome
+- **Air field** = central rising jet (rational-function core, weakening with height) + floor inflow + 3D noise turbulence; balls follow it through linear drag `a = k(u − v)`
+- **Collisions**: sphere–sphere impulses (e = 0.55) with position correction, glass shell, both faces of the inlet funnel (signed cone distance), throat wall, gate lid
+- **The draw is pure physics**: no artificial suction. The jet's drag pushes balls up into the funnel and only a ball that passes the throat is drawn, so draw timing depends on the mixing state
+- **Procedural assets**: ball textures are drawn on a canvas at runtime, all geometry is primitives, zero external asset files
+- **Procedural sound**: synthesized with Web Audio at runtime (zero sample files). Ball-ball and ball-glass impacts scale with impact speed and pan with the camera, the blower hum fades with the air jet, a rising whoosh when a ball is drawn, a bell note climbing per tray slot, and a fanfare when all seven are out
 
-## 조작
+## Controls
 
-- 1× / 2× / 4× / 8× 속도, 드래그 회전, 휠 줌, 자동 회전 토글, 효과음 켜기/끄기 (설정은 브라우저에 저장)
+- 1× / 2× / 4× / 8× speed, drag to orbit, wheel to zoom, auto-orbit toggle, sound on/off (saved in the browser)

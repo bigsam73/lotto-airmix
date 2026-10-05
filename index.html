@@ -1,18 +1,18 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>에어믹스 로또 추첨기</title>
+<title>Air-Mix Lotto Draw</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@800;900&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@800;900&family=Noto+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
 /* Layout: dark 3D stage + result tray on the left, order-entry control panel on the right; stacks to one column on phones. */
 :root{
   --bg:#eef0f4; --panel:#ffffff; --fg:#141a24; --muted:#5d6778; --line:#d6dbe4;
   --accent:#fbc400; --accent-fg:#1a1400; --stage:#0b0f16; --stage-hi:#1a2436; --good:#2e9e5b;
-  --font-display:"Gothic A1","Noto Sans KR",system-ui,sans-serif;
-  --font-body:"Noto Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-display:"Gothic A1","Noto Sans",system-ui,sans-serif;
+  --font-body:"Noto Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 }
 @media (prefers-color-scheme: dark){
@@ -55,6 +55,7 @@ h1{font-family:var(--font-display);font-weight:900;font-size:clamp(26px,3.4vw,38
 
 /* result overlay: winning numbers in big type over the 3D stage once all seven balls are in the tray */
 .result{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(80% 80% at 50% 40%,rgba(8,11,16,.6),rgba(8,11,16,.9));backdrop-filter:blur(4px)}
+.result[hidden]{display:none}
 .result-card{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;max-width:100%;min-width:0}
 .result-kicker{font:600 12px var(--font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
 .result h3{margin:0;font:900 clamp(22px,3.2vw,32px)/1.1 var(--font-display);color:#fff;letter-spacing:-.01em}
@@ -120,99 +121,99 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
   <header>
     <div>
       <p class="eyebrow">Lotto 6/45 · Air-mix · Deterministic rigid-body sim</p>
-      <h1>에어믹스 로또 추첨기</h1>
+      <h1>Air-Mix Lotto Draw</h1>
     </div>
     <div class="steps" id="steps">
-      <span class="step" data-p="loading"><i></i>투입</span>
-      <span class="step" data-p="mixing"><i></i>혼합</span>
-      <span class="step" data-p="drawing"><i></i>추첨</span>
-      <span class="step" data-p="done"><i></i>완료</span>
+      <span class="step" data-p="loading"><i></i>Load</span>
+      <span class="step" data-p="mixing"><i></i>Mix</span>
+      <span class="step" data-p="drawing"><i></i>Draw</span>
+      <span class="step" data-p="done"><i></i>Done</span>
     </div>
   </header>
 
   <div class="grid">
     <div class="left">
-      <section class="stage" id="stage" aria-label="3D 추첨 장면">
+      <section class="stage" id="stage" aria-label="3D draw scene">
         <canvas id="gl"></canvas>
         <div class="hud">
           <div class="hud-top">
-            <div class="status"><span id="statusMain">투입 순서를 정한 뒤 추첨을 시작하세요</span><span class="t" id="statusT">t = 0.000 s · step 0</span></div>
-            <div class="seg" id="speed" role="group" aria-label="시뮬레이션 속도">
+            <div class="status"><span id="statusMain">Set the loading order, then start the draw</span><span class="t" id="statusT">t = 0.000 s · step 0</span></div>
+            <div class="seg" id="speed" role="group" aria-label="Simulation speed">
               <button data-s="1" aria-pressed="true">1×</button><button data-s="2" aria-pressed="false">2×</button><button data-s="4" aria-pressed="false">4×</button><button data-s="8" aria-pressed="false">8×</button>
             </div>
           </div>
           <div class="hud-bottom">
-            <span class="hint">드래그 회전 · 휠 줌</span>
-            <div class="seg"><button id="autoRot" aria-pressed="true">자동 회전</button><button id="sound" aria-pressed="true" title="효과음 켜기/끄기">소리</button></div>
+            <span class="hint">Drag to orbit · wheel to zoom</span>
+            <div class="seg"><button id="autoRot" aria-pressed="true">Auto-orbit</button><button id="sound" aria-pressed="true" title="Sound effects on/off">Sound</button></div>
           </div>
         </div>
-        <div class="result" id="result" hidden role="dialog" aria-label="당첨 번호">
+        <div class="result" id="result" hidden role="dialog" aria-label="Winning numbers">
           <div class="result-card">
-            <span class="result-kicker">Lotto 6/45 · 추첨 완료</span>
-            <h3>당첨 번호</h3>
+            <span class="result-kicker">Lotto 6/45 · Draw complete</span>
+            <h3>Winning numbers</h3>
             <div class="bigballs" id="bigballs"></div>
             <span class="result-meta" id="resultMeta"></span>
             <div class="result-actions">
-              <button class="btn primary" id="shareCopy" type="button">결과 복사</button>
-              <button class="btn" id="resultRerun" type="button">같은 순서로 다시 추첨</button>
-              <button class="btn" id="resultClose" type="button">기계 보기</button>
+              <button class="btn primary" id="shareCopy" type="button">Copy result</button>
+              <button class="btn" id="resultRerun" type="button">Draw again, same order</button>
+              <button class="btn" id="resultClose" type="button">Show machine</button>
             </div>
-            <textarea id="shareText" readonly aria-label="공유용 결과 텍스트"></textarea>
+            <textarea id="shareText" readonly aria-label="Shareable result text"></textarea>
           </div>
         </div>
       </section>
       <section class="tray" aria-live="polite">
-        <span class="tray-label">결과</span>
+        <span class="tray-label">Result</span>
         <div class="slots" id="slots">
           <span class="slot" data-k="0"></span><span class="slot" data-k="1"></span><span class="slot" data-k="2"></span>
           <span class="slot" data-k="3"></span><span class="slot" data-k="4"></span><span class="slot" data-k="5"></span>
           <span class="plus">+</span><span class="slot" data-k="6"></span>
         </div>
-        <span class="meta" id="trayMeta">아직 추첨 전</span>
+        <span class="meta" id="trayMeta">No draw yet</span>
       </section>
     </div>
 
     <aside class="panel">
       <div>
-        <h2><span class="n">01</span>공 투입 순서</h2>
-        <p>기계에 넣을 순서대로 공을 누르세요. 이 순서가 시뮬레이션의 유일한 입력값이고, 그 해시가 난류 시드가 됩니다.</p>
+        <h2><span class="n">01</span>Ball loading order</h2>
+        <p>Tap the balls in the order they go into the machine. This order is the simulation's only input, and its hash seeds the turbulence.</p>
       </div>
       <div class="ballgrid" id="grid"></div>
       <div class="row">
-        <button class="btn" id="fillAsc">남은 공 오름차순</button>
-        <button class="btn" id="fillRand">남은 공 무작위</button>
-        <button class="btn" id="clear">지우기</button>
+        <button class="btn" id="fillAsc">Fill rest ascending</button>
+        <button class="btn" id="fillRand">Fill rest shuffled</button>
+        <button class="btn" id="clear">Clear</button>
       </div>
       <div class="seq" id="seq"></div>
       <details>
-        <summary>순서 직접 입력 · 복사</summary>
+        <summary>Type or copy the order</summary>
         <div class="inner">
-          <textarea id="txt" placeholder="예) 7, 23, 1, 45, 12 … (1~45, 중복 없이)"></textarea>
-          <div class="row"><button class="btn" id="apply">적용</button><button class="btn" id="copy">현재 순서 복사</button></div>
+          <textarea id="txt" placeholder="e.g. 7, 23, 1, 45, 12 … (1–45, no repeats)"></textarea>
+          <div class="row"><button class="btn" id="apply">Apply</button><button class="btn" id="copy">Copy current order</button></div>
         </div>
       </details>
       <div class="kv">
-        <span>투입된 공</span><b id="cnt">0 / 45</b>
-        <span>시드 FNV-1a</span><b id="seed">—</b>
+        <span>Balls loaded</span><b id="cnt">0 / 45</b>
+        <span>Seed FNV-1a</span><b id="seed">—</b>
       </div>
       <hr>
       <div>
-        <h2><span class="n">02</span>추첨</h2>
-        <p>투입 → 송풍 혼합 5초 → 제트에 실려 상단 깔때기로 올라온 공이 게이트를 통과하면 1개 추첨, 송풍 정지·재혼합을 반복해 7개(6 + 보너스). 고정 타임스텝이므로 같은 순서는 항상 같은 번호를 냅니다.</p>
+        <h2><span class="n">02</span>Draw</h2>
+        <p>Load → 5 s of air mixing → a ball carried up the jet into the top funnel and through the gate is drawn; the blower pauses and remixes between draws until 7 balls are out (6 + bonus). Fixed timestep, so the same order always yields the same numbers.</p>
       </div>
-      <button class="btn primary" id="start" disabled>추첨 시작</button>
-      <button class="btn wide" id="rerun" disabled>같은 순서로 다시 추첨 (재현 확인)</button>
-      <button class="btn wide" id="reset">순서 다시 설정</button>
-      <div class="note" id="note">예시 순서가 미리 채워져 있습니다. 지우고 직접 넣거나 그대로 시작하세요.</div>
+      <button class="btn primary" id="start" disabled>Start draw</button>
+      <button class="btn wide" id="rerun" disabled>Draw again with the same order (verify replay)</button>
+      <button class="btn wide" id="reset">Reset order</button>
+      <div class="note" id="note">An example order is pre-filled. Clear it and enter your own, or start as is.</div>
       <details class="tech">
-        <summary>엔진 노트 · 64k 인트로 기법</summary>
+        <summary>Engine notes · 64k-intro techniques</summary>
         <ul>
-          <li><b>결정론적 고정 타임스텝</b> <code>dt = 1/240 s</code>. 프레임레이트와 속도 배율은 스텝 수만 바꾸고 결과엔 영향이 없습니다.</li>
-          <li><b>단일 시드</b>: 투입 순서 배열을 <code>FNV-1a</code> 32비트로 해시해 모든 절차적 요소(투입 미세 오프셋, 난류장)의 시드로 씁니다.</li>
-          <li><b>정수 해시 value noise</b>로 3D 난류장을 만듭니다. <code>sin/cos/exp</code>를 쓰지 않고 <code>imul</code>·IEEE 기본 연산·<code>sqrt</code>만 사용해 재현성을 확보했습니다.</li>
-          <li><b>공기장</b> = 중앙 상승 제트(유리함수 코어) + 바닥 유입류 + 노이즈 난류, 공은 선형 드래그 <code>a = k(u − v)</code>로 끌려갑니다.</li>
-          <li><b>충돌</b>: 구–구 임펄스(<code>e = 0.55</code>) + 위치 보정, 유리구 내벽, 깔때기 안팎 면, 배출 목 벽, 게이트 덮개. 인위적 흡입력 없이 공기 드래그와 충돌만으로 배출됩니다. 45개라 O(n²)로 충분합니다.</li>
-          <li><b>프로시저럴 에셋</b>: 번호공 텍스처는 실행 시 캔버스로 생성, 지오메트리는 모두 원시 도형. 외부 에셋 0개, 렌더러만 Three.js.</li>
+          <li><b>Deterministic fixed timestep</b> <code>dt = 1/240 s</code>. Frame rate and speed multiplier only change how many steps run per frame, never the outcome.</li>
+          <li><b>Single seed</b>: the loading order is hashed with 32-bit <code>FNV-1a</code> and seeds every procedural element (loading micro-offsets, turbulence field).</li>
+          <li><b>Integer-hash value noise</b> builds the 3D turbulence field. No <code>sin/cos/exp</code>; only <code>imul</code>, basic IEEE arithmetic and <code>sqrt</code>, so results replay identically across browsers.</li>
+          <li><b>Air field</b> = central rising jet (rational-function core) + floor inflow + noise turbulence; balls follow it through linear drag <code>a = k(u − v)</code>.</li>
+          <li><b>Collisions</b>: sphere–sphere impulses (<code>e = 0.55</code>) with position correction, glass shell, both faces of the funnel, throat wall, gate lid. No artificial suction: balls leave through air drag and contacts alone. With 45 balls, O(n²) is plenty.</li>
+          <li><b>Procedural assets</b>: ball textures are drawn on a canvas at runtime, all geometry is primitives. Zero external assets; Three.js is the only dependency.</li>
         </ul>
       </details>
     </aside>
@@ -571,7 +572,7 @@ function ballTexture(n){
   g.fillStyle=grad;g.fillRect(0,0,512,256);
   for(const cx of [128,384]){
     g.fillStyle='#ffffff';g.beginPath();g.ellipse(cx,128,86,84,0,0,Math.PI*2);g.fill();
-    g.fillStyle='#17191c';g.font='900 92px "Gothic A1","Noto Sans KR",sans-serif';g.textAlign='center';g.textBaseline='middle';
+    g.fillStyle='#17191c';g.font='900 92px "Gothic A1","Noto Sans",sans-serif';g.textAlign='center';g.textBaseline='middle';
     g.fillText(String(n),cx,134);
   }
   const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;t.anisotropy=renderer.capabilities.getMaxAnisotropy();
@@ -629,7 +630,7 @@ canvas.addEventListener('pointerup',endDrag);canvas.addEventListener('pointercan
 canvas.addEventListener('wheel',e=>{e.preventDefault();cam.dist=Math.min(20,Math.max(6.5,cam.dist*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
 $('#autoRot').addEventListener('click',e=>{cam.auto=!cam.auto;e.currentTarget.setAttribute('aria-pressed',String(cam.auto));});
 const soundBtn=$('#sound');
-function soundLabel(){soundBtn.setAttribute('aria-pressed',String(SFX.on));soundBtn.textContent=SFX.on?'\u{1F50A} 소리':'\u{1F507} 소리';}
+function soundLabel(){soundBtn.setAttribute('aria-pressed',String(SFX.on));soundBtn.textContent=SFX.on?'\u{1F50A} Sound':'\u{1F507} Sound';}
 soundBtn.addEventListener('click',()=>{SFX.toggle();soundLabel();});
 soundLabel();
 
@@ -643,7 +644,7 @@ new ResizeObserver(resize).observe(stage);resize();
 let order=[];
 const grid=$('#grid'),seqEl=$('#seq'),cntEl=$('#cnt'),seedEl=$('#seed'),startBtn=$('#start'),rerunBtn=$('#rerun'),txt=$('#txt');
 for(let n=1;n<=N;n++){
-  const b=document.createElement('button');b.className='chip '+classOf(n);b.type='button';b.dataset.n=n;b.textContent=n;b.setAttribute('aria-label',n+'번 공');
+  const b=document.createElement('button');b.className='chip '+classOf(n);b.type='button';b.dataset.n=n;b.textContent=n;b.setAttribute('aria-label','Ball '+n);
   b.addEventListener('click',()=>{if(S.phase!=='idle')return;const k=order.indexOf(n);if(k>=0)order.splice(k,1);else order.push(n);renderOrder();});
   grid.appendChild(b);
 }
@@ -657,10 +658,10 @@ function renderOrder(){
     else if(o)o.remove();
   });
   seqEl.innerHTML='';
-  if(!order.length){const e=document.createElement('span');e.className='empty';e.textContent='아직 넣은 공이 없습니다';seqEl.appendChild(e);}
-  order.forEach(n=>{const m=document.createElement('span');m.className='mini '+classOf(n);m.textContent=n;m.title=(order.indexOf(n)+1)+'번째';seqEl.appendChild(m);});
+  if(!order.length){const e=document.createElement('span');e.className='empty';e.textContent='No balls loaded yet';seqEl.appendChild(e);}
+  order.forEach(n=>{const m=document.createElement('span');m.className='mini '+classOf(n);m.textContent=n;m.title='#'+(order.indexOf(n)+1);seqEl.appendChild(m);});
   cntEl.textContent=order.length+' / '+N;
-  seedEl.textContent=order.length===N?hex8(fnv1a(order)):'— (45개 필요)';
+  seedEl.textContent=order.length===N?hex8(fnv1a(order)):'— (needs all 45)';
   startBtn.disabled=!(editing&&order.length===N);
   rerunBtn.disabled=!(S.phase==='done');
   ['#fillAsc','#fillRand','#clear','#apply'].forEach(s=>$(s).disabled=!editing);
@@ -670,19 +671,19 @@ $('#fillAsc').addEventListener('click',()=>{for(let n=1;n<=N;n++)if(!order.inclu
 $('#fillRand').addEventListener('click',()=>{const rest=[];for(let n=1;n<=N;n++)if(!order.includes(n))rest.push(n);for(let i=rest.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[rest[i],rest[j]]=[rest[j],rest[i]];}order=order.concat(rest);renderOrder();});
 $('#clear').addEventListener('click',()=>{order=[];renderOrder();});
 $('#apply').addEventListener('click',()=>{const seen=new Set(),out=[];(txt.value.match(/\d+/g)||[]).forEach(s=>{const n=+s;if(n>=1&&n<=N&&!seen.has(n)){seen.add(n);out.push(n);}});order=out;renderOrder();});
-$('#copy').addEventListener('click',e=>{const s=order.join(', ');const b=e.currentTarget;const ok=()=>{b.textContent='복사됨';setTimeout(()=>b.textContent='현재 순서 복사',1200);};
+$('#copy').addEventListener('click',e=>{const s=order.join(', ');const b=e.currentTarget;const ok=()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy current order',1200);};
   (navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(s).then(ok):Promise.reject()).catch(()=>{txt.focus();txt.select();});});
 
 const slots=[...document.querySelectorAll('#slots .slot')],trayMeta=$('#trayMeta');
-function clearResults(){slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='추첨 중…';}
+function clearResults(){slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='Drawing…';}
 function fillSlot(k,n){const s=slots[k];s.className='slot filled';s.textContent=n;s.style.background=colorOf(n);}
 function showResult(k,n){
   fillSlot(k,n);
-  trayMeta.textContent='추첨 순서 '+S.drawn.slice(0,k+1).join(' · ');
+  trayMeta.textContent='Draw order '+S.drawn.slice(0,k+1).join(' · ');
   if(k===DRAW-1){
     const main=S.drawn.slice(0,6).slice().sort((a,b)=>a-b);
     main.forEach((v,i)=>fillSlot(i,v));fillSlot(6,S.drawn[6]);
-    trayMeta.textContent='정렬 표시 · 추첨 순서 '+S.drawn.slice(0,6).join(' · ')+' + '+S.drawn[6]+' · 시드 '+hex8(S.seed);
+    trayMeta.textContent='Sorted · draw order '+S.drawn.slice(0,6).join(' · ')+' + '+S.drawn[6]+' · seed '+hex8(S.seed);
     renderOrder();
     showOverlay(main,S.drawn[6]);
   }
@@ -692,21 +693,21 @@ function showResult(k,n){
 const resultEl=$('#result'),bigballs=$('#bigballs'),resultMeta=$('#resultMeta'),shareText=$('#shareText'),shareBtn=$('#shareCopy');
 function showOverlay(main,bonus){
   bigballs.innerHTML='';
-  const add=(n,i,bonus)=>{const b=document.createElement('span');b.className='bigball'+(bonus?' bonus':'');b.style.background=colorOf(n);b.style.animationDelay=(i*0.09)+'s';b.textContent=n;b.setAttribute('aria-label',(bonus?'보너스 ':'')+n+'번');bigballs.appendChild(b);};
+  const add=(n,i,bonus)=>{const b=document.createElement('span');b.className='bigball'+(bonus?' bonus':'');b.style.background=colorOf(n);b.style.animationDelay=(i*0.09)+'s';b.textContent=n;b.setAttribute('aria-label',(bonus?'Bonus ':'')+n);bigballs.appendChild(b);};
   main.forEach((n,i)=>add(n,i,false));
   const plus=document.createElement('span');plus.className='bigplus';plus.textContent='+';plus.setAttribute('aria-hidden','true');bigballs.appendChild(plus);
   add(bonus,6,true);
-  resultMeta.textContent='보너스 '+bonus+' · 추첨 순서 '+S.drawn.slice(0,6).join(' · ')+' + '+bonus+' · 시드 '+hex8(S.seed);
-  shareText.value='에어믹스 로또 추첨 결과\n당첨 번호 '+main.join(' ')+' + 보너스 '+bonus+'\n추첨 순서 '+S.drawn.join(' → ')+'\n시드 '+hex8(S.seed)+' · 투입 순서 '+S.order.join(',')+'\n'+location.href;
-  resultEl.classList.remove('fallback');shareBtn.textContent='결과 복사';resultEl.hidden=false;
+  resultMeta.textContent='Bonus '+bonus+' · draw order '+S.drawn.slice(0,6).join(' · ')+' + '+bonus+' · seed '+hex8(S.seed);
+  shareText.value='Air-Mix Lotto Draw result\nWinning numbers '+main.join(' ')+' + bonus '+bonus+'\nDraw order '+S.drawn.join(' → ')+'\nSeed '+hex8(S.seed)+' · loading order '+S.order.join(',')+'\n'+location.href;
+  resultEl.classList.remove('fallback');shareBtn.textContent='Copy result';resultEl.hidden=false;
 }
 function hideOverlay(){resultEl.hidden=true;resultEl.classList.remove('fallback');}
 $('#resultClose').addEventListener('click',hideOverlay);
 $('#resultRerun').addEventListener('click',()=>{if(S.phase==='done')startDraw();});
 shareBtn.addEventListener('click',()=>{
-  const ok=()=>{shareBtn.textContent='복사됨 · 붙여넣어 공유하세요';setTimeout(()=>shareBtn.textContent='결과 복사',1600);};
+  const ok=()=>{shareBtn.textContent='Copied · paste to share';setTimeout(()=>shareBtn.textContent='Copy result',1600);};
   (navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(shareText.value).then(ok):Promise.reject())
-    .catch(()=>{resultEl.classList.add('fallback');shareBtn.textContent='아래 텍스트를 직접 복사하세요';shareText.focus();shareText.select();});
+    .catch(()=>{resultEl.classList.add('fallback');shareBtn.textContent='Copy the text below manually';shareText.focus();shareText.select();});
 });
 
 function startDraw(){
@@ -716,12 +717,12 @@ function startDraw(){
   resetSim();
   for(let i=0;i<N;i++){meshes[i].material.map=ballTexture(S.order[i]);meshes[i].material.needsUpdate=true;meshes[i].quaternion.identity();}
   clearResults();hideOverlay();S.phase='loading';lid.position.x=0;
-  $('#note').textContent='시드 '+hex8(S.seed)+' · 같은 순서로 다시 추첨하면 동일한 번호가 나옵니다.';
+  $('#note').textContent='Seed '+hex8(S.seed)+' · drawing again with the same order gives the same numbers.';
   renderOrder();
 }
 startBtn.addEventListener('click',startDraw);
 rerunBtn.addEventListener('click',()=>{if(S.phase==='done')startDraw();});
-$('#reset').addEventListener('click',()=>{S.phase='idle';resetSim();SFX.ev.length=0;hideOverlay();S.order=[];meshes.forEach(m=>m.visible=false);slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='아직 추첨 전';lid.position.x=0;renderOrder();});
+$('#reset').addEventListener('click',()=>{S.phase='idle';resetSim();SFX.ev.length=0;hideOverlay();S.order=[];meshes.forEach(m=>m.visible=false);slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='No draw yet';lid.position.x=0;renderOrder();});
 $('#speed').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.speed=+b.dataset.s;[...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed',String(x===b)));});
 
 /* HUD */
@@ -731,11 +732,11 @@ let lastMain='',lastT='';
 function hud(){
   let m;
   switch(S.phase){
-    case 'idle':m='투입 순서를 정한 뒤 추첨을 시작하세요';break;
-    case 'loading':m='공 투입 중 · '+S.inserted+' / '+N;break;
-    case 'mixing':m='송풍 혼합 중 · '+Math.max(0,T_MIX-(S.t-S.mixStart)).toFixed(1)+' s 남음';break;
-    case 'drawing':m='추첨 중 · '+S.drawn.length+' / '+DRAW+(S.gateOpen?' · 게이트 열림':S.air?' · 게이트 닫힘 · 재혼합':' · 송풍 정지 · 공 낙하');break;
-    default:m='추첨 완료 · 6 + 보너스 1';
+    case 'idle':m='Set the loading order, then start the draw';break;
+    case 'loading':m='Loading balls · '+S.inserted+' / '+N;break;
+    case 'mixing':m='Air mixing · '+Math.max(0,T_MIX-(S.t-S.mixStart)).toFixed(1)+' s left';break;
+    case 'drawing':m='Drawing · '+S.drawn.length+' / '+DRAW+(S.gateOpen?' · gate open':S.air?' · gate closed · remixing':' · blower off · balls settling');break;
+    default:m='Draw complete · 6 + 1 bonus';
   }
   if(m!==lastMain){statusMain.textContent=lastMain=m;}
   const tt='t = '+S.t.toFixed(3)+' s · step '+S.steps+' · '+S.speed+'×';
