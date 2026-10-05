@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>에어믹스 로또 추첨기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@800;900&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: dark 3D stage + result tray on the left, order-entry control panel on the right; stacks to one column on phones. */
+:root{
+  --bg:#eef0f4; --panel:#ffffff; --fg:#141a24; --muted:#5d6778; --line:#d6dbe4;
+  --accent:#fbc400; --accent-fg:#1a1400; --stage:#0b0f16; --stage-hi:#1a2436; --good:#2e9e5b;
+  --font-display:"Gothic A1","Noto Sans KR",system-ui,sans-serif;
+  --font-body:"Noto Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#0e131b; --panel:#161d28; --fg:#e8ecf2; --muted:#94a0b4; --line:#273142; --accent:#fbc400; --accent-fg:#1a1400; --stage:#070a0f; --stage-hi:#182233; --good:#5ad48a; color-scheme:dark }
+}
+:root[data-theme="dark"]{ --bg:#0e131b; --panel:#161d28; --fg:#e8ecf2; --muted:#94a0b4; --line:#273142; --accent:#fbc400; --accent-fg:#1a1400; --stage:#070a0f; --stage-hi:#182233; --good:#5ad48a; color-scheme:dark }
+
+html,body{height:100%}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);line-height:1.5;-webkit-font-smoothing:antialiased}
+.app{max-width:1380px;margin:0 auto;padding-block:20px 36px;padding-inline:clamp(16px,3vw,32px);display:flex;flex-direction:column;gap:18px}
+
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px}
+.eyebrow{font:600 11px/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+h1{font-family:var(--font-display);font-weight:900;font-size:clamp(26px,3.4vw,38px);line-height:1.1;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.steps{display:flex;flex-wrap:wrap;gap:6px;font:500 12px var(--font-mono)}
+.step{padding:6px 11px;border:1px solid var(--line);border-radius:999px;color:var(--muted);display:flex;gap:7px;align-items:center}
+.step i{width:7px;height:7px;border-radius:50%;background:var(--line);display:inline-block}
+.step.active{border-color:var(--accent);color:var(--fg)}
+.step.active i{background:var(--accent);box-shadow:0 0 0 3px rgba(251,196,0,.3)}
+.step.done i{background:var(--good)}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:18px;align-items:start}
+@media (max-width:940px){.grid{grid-template-columns:1fr}}
+.left{display:flex;flex-direction:column;gap:12px;min-width:0}
+
+.stage{position:relative;border-radius:16px;overflow:hidden;background:radial-gradient(120% 90% at 50% 15%,var(--stage-hi) 0%,var(--stage) 70%);aspect-ratio:16/11;min-height:340px;border:1px solid var(--line);max-width:100%}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.hud{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:12px}
+.hud > *{pointer-events:auto}
+.hud-top,.hud-bottom{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap}
+.status{background:rgba(8,11,16,.62);backdrop-filter:blur(6px);color:#e8ecf2;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 12px;font:500 13px var(--font-body);display:flex;flex-direction:column;gap:2px;min-width:0}
+.status .t{font:600 11.5px var(--font-mono);color:#a9b4c6;font-variant-numeric:tabular-nums}
+.seg{display:flex;background:rgba(8,11,16,.62);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:3px;gap:2px;backdrop-filter:blur(6px)}
+.seg button{background:transparent;border:0;color:#c6cfdd;font:600 12px var(--font-mono);padding:6px 9px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+.seg button:focus-visible{outline:2px solid #fff;outline-offset:1px}
+.hint{color:#8b97ab;font:500 11px var(--font-mono);background:rgba(8,11,16,.5);padding:5px 9px;border-radius:8px}
+
+.tray{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.tray-label{font:600 11px var(--font-mono);letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+.slots{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.slot{width:46px;height:46px;border-radius:50%;border:2px dashed var(--line);display:grid;place-items:center;font:900 18px var(--font-display);color:#17191c;font-variant-numeric:tabular-nums}
+.slot.filled{border:0;box-shadow:inset -6px -8px 14px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.2);animation:pop .35s cubic-bezier(.2,.9,.3,1.3)}
+@keyframes pop{from{transform:scale(.3)}to{transform:scale(1)}}
+.plus{font:700 20px var(--font-mono);color:var(--muted)}
+.tray .meta{font:500 12px var(--font-mono);color:var(--muted);margin-left:auto;min-width:0;overflow-wrap:anywhere}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel h2{font-family:var(--font-display);font-weight:900;font-size:15px;margin:0 0 4px;display:flex;align-items:center;gap:8px;letter-spacing:-.01em}
+.panel h2 .n{font:600 11px var(--font-mono);color:var(--accent-fg);background:var(--accent);border-radius:6px;padding:2px 6px}
+.panel p{margin:0;font-size:13px;color:var(--muted)}
+.ballgrid{display:grid;grid-template-columns:repeat(9,1fr);gap:7px}
+.chip{position:relative;aspect-ratio:1;width:100%;border-radius:50%;border:0;padding:0;cursor:pointer;font:900 13px var(--font-display);color:#17191c;box-shadow:inset -4px -5px 8px rgba(0,0,0,.16);transition:transform .12s,opacity .12s}
+.chip:hover:not(:disabled){transform:translateY(-1px)}
+.chip:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.chip.picked{opacity:.32;box-shadow:none}
+.chip .o{position:absolute;right:-5px;top:-5px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--fg);color:var(--bg);font:600 10px var(--font-mono);display:grid;place-items:center;opacity:1}
+.chip:disabled{cursor:default;transform:none}
+.c1{background:#fbc400}.c2{background:#69c8f2}.c3{background:#ff7272}.c4{background:#b4b4b4}.c5{background:#b0d840}
+.seq{display:flex;flex-wrap:wrap;gap:4px;min-height:54px;padding:8px;border:1px dashed var(--line);border-radius:10px;align-content:flex-start}
+.seq .mini{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:800 10px var(--font-display);color:#17191c}
+.seq .empty{font:500 12px var(--font-body);color:var(--muted);align-self:center}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.btn{appearance:none;border:1px solid var(--line);background:transparent;color:var(--fg);font:600 13px var(--font-body);padding:8px 12px;border-radius:9px;cursor:pointer}
+.btn:hover:not(:disabled){border-color:var(--muted)}
+.btn:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:transparent;font-weight:800;font-size:15px;padding:12px 16px;width:100%}
+.btn.wide{width:100%}
+textarea{width:100%;min-height:64px;font:500 12px var(--font-mono);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:9px;padding:8px;resize:vertical}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font:500 12px var(--font-mono);color:var(--muted)}
+.kv b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+details summary{cursor:pointer;font:600 13px var(--font-body);color:var(--fg)}
+details .inner{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.tech ul{margin:10px 0 0;padding-left:18px;font-size:12.5px;color:var(--muted)}
+.tech li{margin:5px 0}
+.tech code{font:500 11.5px var(--font-mono);background:var(--bg);padding:1px 5px;border-radius:4px;color:var(--fg)}
+hr{border:0;border-top:1px solid var(--line);margin:0}
+.note{font:500 12px var(--font-body);color:var(--muted);padding:8px 10px;border-left:3px solid var(--accent);background:var(--bg);border-radius:0 8px 8px 0}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <p class="eyebrow">Lotto 6/45 · Air-mix · Deterministic rigid-body sim</p>
+      <h1>에어믹스 로또 추첨기</h1>
+    </div>
+    <div class="steps" id="steps">
+      <span class="step" data-p="loading"><i></i>투입</span>
+      <span class="step" data-p="mixing"><i></i>혼합</span>
+      <span class="step" data-p="drawing"><i></i>추첨</span>
+      <span class="step" data-p="done"><i></i>완료</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="left">
+      <section class="stage" id="stage" aria-label="3D 추첨 장면">
+        <canvas id="gl"></canvas>
+        <div class="hud">
+          <div class="hud-top">
+            <div class="status"><span id="statusMain">투입 순서를 정한 뒤 추첨을 시작하세요</span><span class="t" id="statusT">t = 0.000 s · step 0</span></div>
+            <div class="seg" id="speed" role="group" aria-label="시뮬레이션 속도">
+              <button data-s="1" aria-pressed="true">1×</button><button data-s="2" aria-pressed="false">2×</button><button data-s="4" aria-pressed="false">4×</button><button data-s="8" aria-pressed="false">8×</button>
+            </div>
+          </div>
+          <div class="hud-bottom">
+            <span class="hint">드래그 회전 · 휠 줌</span>
+            <div class="seg"><button id="autoRot" aria-pressed="true">자동 회전</button></div>
+          </div>
+        </div>
+      </section>
+      <section class="tray" aria-live="polite">
+        <span class="tray-label">결과</span>
+        <div class="slots" id="slots">
+          <span class="slot" data-k="0"></span><span class="slot" data-k="1"></span><span class="slot" data-k="2"></span>
+          <span class="slot" data-k="3"></span><span class="slot" data-k="4"></span><span class="slot" data-k="5"></span>
+          <span class="plus">+</span><span class="slot" data-k="6"></span>
+        </div>
+        <span class="meta" id="trayMeta">아직 추첨 전</span>
+      </section>
+    </div>
+
+    <aside class="panel">
+      <div>
+        <h2><span class="n">01</span>공 투입 순서</h2>
+        <p>기계에 넣을 순서대로 공을 누르세요. 이 순서가 시뮬레이션의 유일한 입력값이고, 그 해시가 난류 시드가 됩니다.</p>
+      </div>
+      <div class="ballgrid" id="grid"></div>
+      <div class="row">
+        <button class="btn" id="fillAsc">남은 공 오름차순</button>
+        <button class="btn" id="fillRand">남은 공 무작위</button>
+        <button class="btn" id="clear">지우기</button>
+      </div>
+      <div class="seq" id="seq"></div>
+      <details>
+        <summary>순서 직접 입력 · 복사</summary>
+        <div class="inner">
+          <textarea id="txt" placeholder="예) 7, 23, 1, 45, 12 … (1~45, 중복 없이)"></textarea>
+          <div class="row"><button class="btn" id="apply">적용</button><button class="btn" id="copy">현재 순서 복사</button></div>
+        </div>
+      </details>
+      <div class="kv">
+        <span>투입된 공</span><b id="cnt">0 / 45</b>
+        <span>시드 FNV-1a</span><b id="seed">—</b>
+      </div>
+      <hr>
+      <div>
+        <h2><span class="n">02</span>추첨</h2>
+        <p>투입 → 송풍 혼합 5초 → 상단 흡입구로 7개(6 + 보너스). 고정 타임스텝이므로 같은 순서는 항상 같은 번호를 냅니다.</p>
+      </div>
+      <button class="btn primary" id="start" disabled>추첨 시작</button>
+      <button class="btn wide" id="rerun" disabled>같은 순서로 다시 추첨 (재현 확인)</button>
+      <button class="btn wide" id="reset">순서 다시 설정</button>
+      <div class="note" id="note">예시 순서가 미리 채워져 있습니다. 지우고 직접 넣거나 그대로 시작하세요.</div>
+      <details class="tech">
+        <summary>엔진 노트 · 64k 인트로 기법</summary>
+        <ul>
+          <li><b>결정론적 고정 타임스텝</b> <code>dt = 1/240 s</code>. 프레임레이트와 속도 배율은 스텝 수만 바꾸고 결과엔 영향이 없습니다.</li>
+          <li><b>단일 시드</b>: 투입 순서 배열을 <code>FNV-1a</code> 32비트로 해시해 모든 절차적 요소(투입 미세 오프셋, 난류장)의 시드로 씁니다.</li>
+          <li><b>정수 해시 value noise</b>로 3D 난류장을 만듭니다. <code>sin/cos/exp</code>를 쓰지 않고 <code>imul</code>·IEEE 기본 연산·<code>sqrt</code>만 사용해 재현성을 확보했습니다.</li>
+          <li><b>공기장</b> = 중앙 상승 제트(유리함수 코어) + 바닥 유입류 + 노이즈 난류, 공은 선형 드래그 <code>a = k(u − v)</code>로 끌려갑니다.</li>
+          <li><b>충돌</b>: 구–구 임펄스(<code>e = 0.55</code>) + 위치 보정, 유리구 내벽, 흡입 튜브 벽, 게이트 덮개. 45개라 O(n²)로 충분합니다.</li>
+          <li><b>프로시저럴 에셋</b>: 번호공 텍스처는 실행 시 캔버스로 생성, 지오메트리는 모두 원시 도형. 외부 에셋 0개, 렌더러만 Three.js.</li>
+        </ul>
+      </details>
+    </aside>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+const $=s=>document.querySelector(s);
+const N=45, DRAW=7;
+const colorOf=n=>n<=10?'#fbc400':n<=20?'#69c8f2':n<=30?'#ff7272':n<=40?'#b4b4b4':'#b0d840';
+const classOf=n=>'c'+(n<=10?1:n<=20?2:n<=30?3:n<=40?4:5);
+
+/* ---------- 64k-intro primitives: hash, PRNG-free noise ---------- */
+const fnv1a=a=>{let h=0x811c9dc5;for(let i=0;i<a.length;i++){h^=a[i];h=Math.imul(h,0x01000193);}return h>>>0;};
+const hex8=h=>'0x'+h.toString(16).padStart(8,'0').toUpperCase();
+function ih(x,y,z,s){let h=Math.imul(x|0,0x27d4eb2d)^Math.imul(y|0,0x165667b1)^Math.imul(z|0,0x9e3779b1)^(s|0);h=Math.imul(h^(h>>>15),0x85ebca6b);h^=h>>>13;h=Math.imul(h,0xc2b2ae35);h^=h>>>16;return (h>>>0)*4.656612873077393e-10-1;}
+const lerp=(a,b,t)=>a+(b-a)*t;
+function vnoise(x,y,z,s){
+  const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z);
+  let fx=x-xi,fy=y-yi,fz=z-zi;
+  fx=fx*fx*(3-2*fx);fy=fy*fy*(3-2*fy);fz=fz*fz*(3-2*fz);
+  return lerp(
+    lerp(lerp(ih(xi,yi,zi,s),ih(xi+1,yi,zi,s),fx),lerp(ih(xi,yi+1,zi,s),ih(xi+1,yi+1,zi,s),fx),fy),
+    lerp(lerp(ih(xi,yi,zi+1,s),ih(xi+1,yi,zi+1,s),fx),lerp(ih(xi,yi+1,zi+1,s),ih(xi+1,yi+1,zi+1,s),fx),fy),fz);
+}
+
+/* ---------- physics constants (1 unit ≈ 10 cm) ---------- */
+const R=3.2, BR=0.32, G=98, DT=1/240, REST=0.55;
+const HOLE=0.55, TUBE_IN=HOLE-BR*0.5, LID=R-0.25, FLOOR_Y=-4.65;
+const JET_U=44, JET_W=1.2, DRAG=5, TURB=8, SUCK=60;
+const T_INSERT=0.11, T_MIX=5.0, T_GATE=1.1, EXIT_T=1.3, SLIDE_T=0.35;
+const TRAY=new THREE.Vector3(3.5,-3.23,1.55), SLOT_DX=0.74;
+
+const S={
+  order:[], seed:0, t:0, steps:0, phase:'idle', inserted:0, mixStart:0, doneAt:0,
+  px:new Float64Array(N),py:new Float64Array(N),pz:new Float64Array(N),
+  vx:new Float64Array(N),vy:new Float64Array(N),vz:new Float64Array(N),
+  st:new Uint8Array(N), exitT:new Float64Array(N), slot:new Int8Array(N),
+  gateOpen:false, gateTimer:0, drawn:[], air:false, speed:1, acc:0
+};
+
+function resetSim(){
+  S.t=0;S.steps=0;S.inserted=0;S.gateOpen=false;S.gateTimer=0;S.drawn=[];S.air=false;S.acc=0;
+  S.st.fill(0);S.exitT.fill(0);S.slot.fill(-1);
+  S.px.fill(0);S.py.fill(0);S.pz.fill(0);S.vx.fill(0);S.vy.fill(0);S.vz.fill(0);
+  shown.fill(0);
+}
+
+function capture(i){
+  S.st[i]=2;S.exitT[i]=0;S.slot[i]=S.drawn.length;S.drawn.push(S.order[i]);
+  S.gateOpen=false;S.gateTimer=T_GATE;
+  if(S.drawn.length>=DRAW){S.phase='done';S.doneAt=S.t;}
+}
+
+function step(){
+  const t=S.t, seed=S.seed;
+  if(S.phase==='loading'){
+    while(S.inserted<N && t>=S.inserted*T_INSERT){
+      const k=S.inserted;
+      S.px[k]=ih(k,11,7,seed)*0.08; S.pz[k]=ih(k,13,5,seed)*0.08; S.py[k]=R+1.0;
+      S.vx[k]=ih(k,17,3,seed)*0.3; S.vz[k]=ih(k,19,2,seed)*0.3; S.vy[k]=-2;
+      S.st[k]=1; S.inserted++;
+    }
+    if(S.inserted>=N && t>=N*T_INSERT+1.0){S.phase='mixing';S.mixStart=t;}
+  }else if(S.phase==='mixing'){
+    if(t-S.mixStart>=T_MIX){S.phase='drawing';S.gateOpen=true;}
+  }else if(S.phase==='drawing'){
+    if(!S.gateOpen){S.gateTimer-=DT;if(S.gateTimer<=0)S.gateOpen=true;}
+  }
+  const air=S.phase==='mixing'||S.phase==='drawing'||(S.phase==='done'&&t-S.doneAt<1.5);
+  S.air=air;
+  const px=S.px,py=S.py,pz=S.pz,vx=S.vx,vy=S.vy,vz=S.vz,st=S.st;
+
+  /* forces + integration */
+  for(let i=0;i<N;i++){
+    if(st[i]!==1)continue;
+    const x=px[i],y=py[i],z=pz[i];
+    let ax=0,ay=-G,az=0;
+    if(air){
+      const hd2=x*x+z*z, q=1/(1+hd2/(JET_W*JET_W)), core=q*q;
+      const hfall=1-0.35*(y+R)/(2*R);
+      let ux=0, uy=JET_U*core*hfall-3.5*(1-core), uz=0;
+      if(y<-R*0.45){const hd=Math.sqrt(hd2)+1e-6;ux-=x/hd*3.5;uz-=z/hd*3.5;}
+      const nt=t*1.4, f=1.25;
+      ux+=TURB*vnoise(x*f+nt,y*f,z*f,seed);
+      uy+=TURB*0.8*vnoise(x*f,y*f+nt,z*f,seed^0x5bd1e995);
+      uz+=TURB*vnoise(x*f,y*f,z*f+nt,seed^0x27d4eb2f);
+      ax+=DRAG*(ux-vx[i]);ay+=DRAG*(uy-vy[i]);az+=DRAG*(uz-vz[i]);
+      if(S.gateOpen&&S.phase==='drawing'&&y>R*0.3&&hd2<2.6){
+        const dx=-x,dy=R-y,dz=-z;const d=Math.sqrt(dx*dx+dy*dy+dz*dz)+1e-6;const s=SUCK/d;
+        ax+=dx*s;ay+=dy*s;az+=dz*s;
+      }
+    }else{ax-=1.5*vx[i];ay-=1.5*vy[i];az-=1.5*vz[i];}
+    vx[i]+=ax*DT;vy[i]+=ay*DT;vz[i]+=az*DT;
+    px[i]+=vx[i]*DT;py[i]+=vy[i]*DT;pz[i]+=vz[i]*DT;
+  }
+
+  /* ball–ball collisions */
+  const D=2*BR, D2=D*D;
+  for(let i=0;i<N;i++){
+    if(st[i]!==1)continue;
+    for(let j=i+1;j<N;j++){
+      if(st[j]!==1)continue;
+      const dx=px[j]-px[i],dy=py[j]-py[i],dz=pz[j]-pz[i];
+      const d2=dx*dx+dy*dy+dz*dz;
+      if(d2>=D2||d2===0)continue;
+      const d=Math.sqrt(d2),nx=dx/d,ny=dy/d,nz=dz/d,pen=(D-d)*0.5;
+      px[i]-=nx*pen;py[i]-=ny*pen;pz[i]-=nz*pen;px[j]+=nx*pen;py[j]+=ny*pen;pz[j]+=nz*pen;
+      const vr=(vx[j]-vx[i])*nx+(vy[j]-vy[i])*ny+(vz[j]-vz[i])*nz;
+      if(vr<0){const J=-(1+REST)*vr*0.5;vx[i]-=J*nx;vy[i]-=J*ny;vz[i]-=J*nz;vx[j]+=J*nx;vy[j]+=J*ny;vz[j]+=J*nz;}
+    }
+  }
+
+  /* walls: glass sphere, top tube, gate lid, floor */
+  for(let i=0;i<N;i++){
+    if(st[i]!==1)continue;
+    const x=px[i],y=py[i],z=pz[i],hd2=x*x+z*z;
+    if(y>LID-BR && hd2<TUBE_IN*TUBE_IN){
+      const hd=Math.sqrt(hd2),lim=HOLE-BR;
+      if(hd>lim){const s=lim/hd;px[i]=x*s;pz[i]=z*s;const vr=(vx[i]*x+vz[i]*z)/hd;if(vr>0){vx[i]-=vr*x/hd;vz[i]-=vr*z/hd;}}
+      if(!S.gateOpen){if(vy[i]>0&&y+BR>LID){py[i]=LID-BR;vy[i]=-vy[i]*REST;}}
+      else if(S.phase==='drawing'&&y>R-0.05){capture(i);}
+    }else{
+      const d=Math.sqrt(hd2+y*y);
+      if(d<R){
+        if(d+BR>R){
+          const nx=x/d,ny=y/d,nz=z/d,pen=d+BR-R;
+          px[i]-=nx*pen;py[i]-=ny*pen;pz[i]-=nz*pen;
+          const vn=vx[i]*nx+vy[i]*ny+vz[i]*nz;
+          if(vn>0){vx[i]-=(1+REST)*vn*nx;vy[i]-=(1+REST)*vn*ny;vz[i]-=(1+REST)*vn*nz;}
+          vx[i]*=0.995;vy[i]*=0.995;vz[i]*=0.995;
+        }
+      }else if(d<R+BR){
+        const nx=x/d,ny=y/d,nz=z/d,pen=R+BR-d;
+        px[i]+=nx*pen;py[i]+=ny*pen;pz[i]+=nz*pen;
+        const vn=vx[i]*nx+vy[i]*ny+vz[i]*nz;
+        if(vn<0){vx[i]-=(1+REST)*vn*nx;vy[i]-=(1+REST)*vn*ny;vz[i]-=(1+REST)*vn*nz;}
+      }
+      if(py[i]<FLOOR_Y+BR){py[i]=FLOOR_Y+BR;if(vy[i]<0)vy[i]=-vy[i]*REST;}
+    }
+  }
+  for(let i=0;i<N;i++){if(st[i]===2){S.exitT[i]+=DT;if(S.exitT[i]>=EXIT_T+SLIDE_T)st[i]=3;}}
+  S.t=t+DT;S.steps++;
+}
+
+/* ---------- rendering (Three.js) ---------- */
+const canvas=$('#gl'), stage=$('#stage');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
+renderer.setClearColor(0x000000,0);
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputEncoding=THREE.sRGBEncoding;
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(42,16/11,0.1,100);
+
+scene.add(new THREE.HemisphereLight(0xbfd4ff,0x1a2130,0.65));
+const sun=new THREE.DirectionalLight(0xffffff,1.15);
+sun.position.set(6,10,7);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-9,right:9,top:9,bottom:-9,near:1,far:30});scene.add(sun);
+const inner=new THREE.PointLight(0xfff1cc,0.55,9);inner.position.set(0,0.6,0);scene.add(inner);
+const fill=new THREE.PointLight(0x9ec1ff,0.35,30);fill.position.set(-6,2,8);scene.add(fill);
+
+const metal=new THREE.MeshStandardMaterial({color:0x2a313c,metalness:0.85,roughness:0.35});
+const darkMat=new THREE.MeshStandardMaterial({color:0x151a22,metalness:0.2,roughness:0.9});
+
+const base=new THREE.Mesh(new THREE.CylinderGeometry(7.2,7.4,0.3,64),darkMat);
+base.position.y=FLOOR_Y-0.15;base.receiveShadow=true;scene.add(base);
+const stand=new THREE.Mesh(new THREE.CylinderGeometry(1.35,1.75,1.7,48),metal);
+stand.position.y=-3.8;stand.castShadow=true;stand.receiveShadow=true;scene.add(stand);
+const collar=new THREE.Mesh(new THREE.TorusGeometry(1.42,0.08,12,48),metal);
+collar.rotation.x=Math.PI/2;collar.position.y=-2.95;scene.add(collar);
+
+const glass=new THREE.Mesh(new THREE.SphereGeometry(R,64,48),new THREE.MeshPhysicalMaterial({
+  color:0xd6e6ff,metalness:0,roughness:0.06,transparent:true,opacity:0.17,clearcoat:1,clearcoatRoughness:0.05,side:THREE.DoubleSide,depthWrite:false
+}));
+glass.renderOrder=10;scene.add(glass);
+
+const nozzle=new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.6,0.5,32),new THREE.MeshStandardMaterial({color:0x3a4350,metalness:0.8,roughness:0.3,emissive:0xfbc400,emissiveIntensity:0}));
+nozzle.position.y=-R+0.2;scene.add(nozzle);
+const airCone=new THREE.Mesh(new THREE.ConeGeometry(1.0,2.6,32,1,true),new THREE.MeshBasicMaterial({color:0xfbc400,transparent:true,opacity:0.08,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));
+airCone.rotation.x=Math.PI;airCone.position.y=-R+1.6;airCone.visible=false;airCone.renderOrder=11;scene.add(airCone);
+
+const rim=new THREE.Mesh(new THREE.TorusGeometry(HOLE+0.08,0.07,12,48),metal);
+rim.rotation.x=Math.PI/2;rim.position.y=R-0.05;scene.add(rim);
+const lid=new THREE.Mesh(new THREE.CylinderGeometry(HOLE+0.02,HOLE+0.02,0.06,32),new THREE.MeshStandardMaterial({color:0xfbc400,metalness:0.4,roughness:0.4}));
+lid.position.y=LID;scene.add(lid);
+
+const curve=new THREE.CatmullRomCurve3([
+  new THREE.Vector3(0,R-0.1,0),new THREE.Vector3(0,R+0.9,0),new THREE.Vector3(1.1,R+1.35,0.5),
+  new THREE.Vector3(2.6,R+0.7,1.1),new THREE.Vector3(3.5,1.0,1.55),TRAY.clone()
+]);
+const tube=new THREE.Mesh(new THREE.TubeGeometry(curve,80,0.44,14,false),new THREE.MeshPhysicalMaterial({
+  color:0xd6e6ff,transparent:true,opacity:0.22,roughness:0.1,clearcoat:1,side:THREE.DoubleSide,depthWrite:false
+}));
+tube.renderOrder=12;scene.add(tube);
+
+const rail=new THREE.Mesh(new THREE.BoxGeometry(SLOT_DX*7+0.9,0.18,0.9),metal);
+rail.position.set(TRAY.x+SLOT_DX*3,TRAY.y-BR-0.09,TRAY.z);rail.receiveShadow=true;rail.castShadow=true;scene.add(rail);
+const bar=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.5,0.9),new THREE.MeshStandardMaterial({color:0xfbc400,roughness:0.5}));
+bar.position.set(TRAY.x+SLOT_DX*5.5,TRAY.y-BR+0.16,TRAY.z);scene.add(bar);
+const post=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,FLOOR_Y*-1+TRAY.y-BR-0.18,16),metal);
+post.position.set(TRAY.x+SLOT_DX*3,(FLOOR_Y+TRAY.y-BR-0.18)/2,TRAY.z);scene.add(post);
+
+/* procedural ball textures */
+const texCache=new Map();
+function ballTexture(n){
+  if(texCache.has(n))return texCache.get(n);
+  const c=document.createElement('canvas');c.width=512;c.height=256;const g=c.getContext('2d');
+  g.fillStyle=colorOf(n);g.fillRect(0,0,512,256);
+  const grad=g.createLinearGradient(0,0,0,256);grad.addColorStop(0,'rgba(0,0,0,.18)');grad.addColorStop(.5,'rgba(0,0,0,0)');grad.addColorStop(1,'rgba(0,0,0,.25)');
+  g.fillStyle=grad;g.fillRect(0,0,512,256);
+  for(const cx of [128,384]){
+    g.fillStyle='#ffffff';g.beginPath();g.ellipse(cx,128,86,84,0,0,Math.PI*2);g.fill();
+    g.fillStyle='#17191c';g.font='900 92px "Gothic A1","Noto Sans KR",sans-serif';g.textAlign='center';g.textBaseline='middle';
+    g.fillText(String(n),cx,134);
+  }
+  const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;t.anisotropy=renderer.capabilities.getMaxAnisotropy();
+  texCache.set(n,t);return t;
+}
+const ballGeo=new THREE.SphereGeometry(BR,28,20);
+const meshes=[];
+for(let i=0;i<N;i++){
+  const m=new THREE.Mesh(ballGeo,new THREE.MeshStandardMaterial({roughness:0.32,metalness:0}));
+  m.castShadow=true;m.visible=false;scene.add(m);meshes.push(m);
+}
+const shown=new Uint8Array(N);
+const tmpV=new THREE.Vector3(), tmpQ=new THREE.Quaternion(), axis=new THREE.Vector3(), identQ=new THREE.Quaternion();
+const slotPos=k=>tmpV.set(TRAY.x+SLOT_DX*k,TRAY.y,TRAY.z);
+
+function sync(dtv){
+  const px=S.px,py=S.py,pz=S.pz,vx=S.vx,vy=S.vy,vz=S.vz,st=S.st;
+  for(let i=0;i<N;i++){
+    const m=meshes[i],s=st[i];
+    if(s===0){m.visible=false;continue;}
+    m.visible=true;
+    if(s===1){
+      m.position.set(px[i],py[i],pz[i]);
+      const sp=Math.sqrt(vx[i]*vx[i]+vy[i]*vy[i]+vz[i]*vz[i]);
+      if(sp>1e-3&&dtv>0){axis.set(vz[i],0,-vx[i]);if(axis.lengthSq()<1e-9)axis.set(1,0,0);axis.normalize();tmpQ.setFromAxisAngle(axis,sp*dtv/BR*0.6);m.quaternion.premultiply(tmpQ);}
+    }else if(s===2){
+      const e=S.exitT[i];
+      if(e<EXIT_T){curve.getPointAt(Math.min(1,e/EXIT_T),m.position);}
+      else{const u=Math.min(1,(e-EXIT_T)/SLIDE_T);m.position.lerpVectors(TRAY,slotPos(S.slot[i]),u);}
+      m.quaternion.slerp(identQ,0.12);
+    }else{
+      m.position.copy(slotPos(S.slot[i]));m.quaternion.copy(identQ);
+      if(!shown[i]){shown[i]=1;showResult(S.slot[i],S.order[i]);}
+    }
+  }
+  lid.position.x=lerp(lid.position.x,S.gateOpen?HOLE*2.2:0,0.18);
+  airCone.visible=S.air;
+  nozzle.material.emissiveIntensity=lerp(nozzle.material.emissiveIntensity,S.air?0.9:0,0.1);
+  if(S.air){const k=1+0.08*Math.sin(performance.now()*0.012);airCone.scale.set(k,1,k);}
+}
+
+/* camera */
+const cam={az:0.42,el:0.22,dist:12.4,auto:true,drag:false,lx:0,ly:0,target:new THREE.Vector3(2.1,-0.15,0.3)};
+let wobble=0;
+function updateCamera(dt){
+  if(cam.auto&&!cam.drag)wobble+=dt*0.25;
+  const az=cam.az+(cam.auto?Math.sin(wobble)*0.3:0), el=cam.el;
+  camera.position.set(cam.target.x+cam.dist*Math.cos(el)*Math.sin(az),cam.target.y+cam.dist*Math.sin(el),cam.target.z+cam.dist*Math.cos(el)*Math.cos(az));
+  camera.lookAt(cam.target);
+}
+canvas.addEventListener('pointerdown',e=>{cam.drag=true;cam.lx=e.clientX;cam.ly=e.clientY;canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointermove',e=>{if(!cam.drag)return;cam.az-=(e.clientX-cam.lx)*0.006;cam.el=Math.min(1.25,Math.max(-0.05,cam.el+(e.clientY-cam.ly)*0.005));cam.lx=e.clientX;cam.ly=e.clientY;});
+const endDrag=()=>{cam.drag=false;};
+canvas.addEventListener('pointerup',endDrag);canvas.addEventListener('pointercancel',endDrag);
+canvas.addEventListener('wheel',e=>{e.preventDefault();cam.dist=Math.min(20,Math.max(6.5,cam.dist*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
+$('#autoRot').addEventListener('click',e=>{cam.auto=!cam.auto;e.currentTarget.setAttribute('aria-pressed',String(cam.auto));});
+
+function resize(){
+  const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;
+  renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);resize();
+
+/* ---------- UI ---------- */
+let order=[];
+const grid=$('#grid'),seqEl=$('#seq'),cntEl=$('#cnt'),seedEl=$('#seed'),startBtn=$('#start'),rerunBtn=$('#rerun'),txt=$('#txt');
+for(let n=1;n<=N;n++){
+  const b=document.createElement('button');b.className='chip '+classOf(n);b.type='button';b.dataset.n=n;b.textContent=n;b.setAttribute('aria-label',n+'번 공');
+  b.addEventListener('click',()=>{if(S.phase!=='idle')return;const k=order.indexOf(n);if(k>=0)order.splice(k,1);else order.push(n);renderOrder();});
+  grid.appendChild(b);
+}
+function renderOrder(){
+  const editing=S.phase==='idle';
+  grid.querySelectorAll('.chip').forEach(b=>{
+    const n=+b.dataset.n,k=order.indexOf(n);
+    b.classList.toggle('picked',k>=0);b.disabled=!editing;
+    let o=b.querySelector('.o');
+    if(k>=0){if(!o){o=document.createElement('span');o.className='o';b.appendChild(o);}o.textContent=k+1;}
+    else if(o)o.remove();
+  });
+  seqEl.innerHTML='';
+  if(!order.length){const e=document.createElement('span');e.className='empty';e.textContent='아직 넣은 공이 없습니다';seqEl.appendChild(e);}
+  order.forEach(n=>{const m=document.createElement('span');m.className='mini '+classOf(n);m.textContent=n;m.title=(order.indexOf(n)+1)+'번째';seqEl.appendChild(m);});
+  cntEl.textContent=order.length+' / '+N;
+  seedEl.textContent=order.length===N?hex8(fnv1a(order)):'— (45개 필요)';
+  startBtn.disabled=!(editing&&order.length===N);
+  rerunBtn.disabled=!(S.phase==='done');
+  ['#fillAsc','#fillRand','#clear','#apply'].forEach(s=>$(s).disabled=!editing);
+  txt.value=order.join(', ');
+}
+$('#fillAsc').addEventListener('click',()=>{for(let n=1;n<=N;n++)if(!order.includes(n))order.push(n);renderOrder();});
+$('#fillRand').addEventListener('click',()=>{const rest=[];for(let n=1;n<=N;n++)if(!order.includes(n))rest.push(n);for(let i=rest.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[rest[i],rest[j]]=[rest[j],rest[i]];}order=order.concat(rest);renderOrder();});
+$('#clear').addEventListener('click',()=>{order=[];renderOrder();});
+$('#apply').addEventListener('click',()=>{const seen=new Set(),out=[];(txt.value.match(/\d+/g)||[]).forEach(s=>{const n=+s;if(n>=1&&n<=N&&!seen.has(n)){seen.add(n);out.push(n);}});order=out;renderOrder();});
+$('#copy').addEventListener('click',e=>{const s=order.join(', ');const b=e.currentTarget;const ok=()=>{b.textContent='복사됨';setTimeout(()=>b.textContent='현재 순서 복사',1200);};
+  (navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(s).then(ok):Promise.reject()).catch(()=>{txt.focus();txt.select();});});
+
+const slots=[...document.querySelectorAll('#slots .slot')],trayMeta=$('#trayMeta');
+function clearResults(){slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='추첨 중…';}
+function fillSlot(k,n){const s=slots[k];s.className='slot filled';s.textContent=n;s.style.background=colorOf(n);}
+function showResult(k,n){
+  fillSlot(k,n);
+  trayMeta.textContent='추첨 순서 '+S.drawn.slice(0,k+1).join(' · ');
+  if(k===DRAW-1){
+    const main=S.drawn.slice(0,6).slice().sort((a,b)=>a-b);
+    main.forEach((v,i)=>fillSlot(i,v));fillSlot(6,S.drawn[6]);
+    trayMeta.textContent='정렬 표시 · 추첨 순서 '+S.drawn.slice(0,6).join(' · ')+' + '+S.drawn[6]+' · 시드 '+hex8(S.seed);
+    renderOrder();
+  }
+}
+
+function startDraw(){
+  if(order.length!==N)return;
+  S.order=order.slice();S.seed=fnv1a(S.order);
+  resetSim();
+  for(let i=0;i<N;i++){meshes[i].material.map=ballTexture(S.order[i]);meshes[i].material.needsUpdate=true;meshes[i].quaternion.identity();}
+  clearResults();S.phase='loading';lid.position.x=0;
+  $('#note').textContent='시드 '+hex8(S.seed)+' · 같은 순서로 다시 추첨하면 동일한 번호가 나옵니다.';
+  renderOrder();
+}
+startBtn.addEventListener('click',startDraw);
+rerunBtn.addEventListener('click',()=>{if(S.phase==='done')startDraw();});
+$('#reset').addEventListener('click',()=>{S.phase='idle';resetSim();S.order=[];meshes.forEach(m=>m.visible=false);slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='아직 추첨 전';lid.position.x=0;renderOrder();});
+$('#speed').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.speed=+b.dataset.s;[...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed',String(x===b)));});
+
+/* HUD */
+const stepEls=[...document.querySelectorAll('#steps .step')],phaseIdx={loading:0,mixing:1,drawing:2,done:3};
+const statusMain=$('#statusMain'),statusT=$('#statusT');
+let lastMain='',lastT='';
+function hud(){
+  let m;
+  switch(S.phase){
+    case 'idle':m='투입 순서를 정한 뒤 추첨을 시작하세요';break;
+    case 'loading':m='공 투입 중 · '+S.inserted+' / '+N;break;
+    case 'mixing':m='송풍 혼합 중 · '+Math.max(0,T_MIX-(S.t-S.mixStart)).toFixed(1)+' s 남음';break;
+    case 'drawing':m='추첨 중 · '+S.drawn.length+' / '+DRAW+(S.gateOpen?' · 게이트 열림':' · 게이트 닫힘');break;
+    default:m='추첨 완료 · 6 + 보너스 1';
+  }
+  if(m!==lastMain){statusMain.textContent=lastMain=m;}
+  const tt='t = '+S.t.toFixed(3)+' s · step '+S.steps+' · '+S.speed+'×';
+  if(tt!==lastT){statusT.textContent=lastT=tt;}
+  const idx=S.phase in phaseIdx?phaseIdx[S.phase]:-1;
+  stepEls.forEach((el,i)=>{el.classList.toggle('active',i===idx);el.classList.toggle('done',idx>i||(S.phase==='done'&&i===3));});
+}
+
+/* main loop */
+let last=performance.now();
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt=Math.min(0.05,(now-last)/1000);last=now;
+  if(S.phase!=='idle'){
+    S.acc+=dt*S.speed;let n=Math.floor(S.acc/DT);if(n>2400)n=2400;S.acc-=n*DT;
+    for(let i=0;i<n;i++)step();
+  }
+  sync(dt*S.speed);updateCamera(dt);renderer.render(scene,camera);hud();
+}
+
+/* boot (hot-update aware) */
+function boot(data){
+  if(data&&Array.isArray(data.order)&&data.order.length)order=data.order.filter(n=>n>=1&&n<=N).slice(0,N);
+  else {order=[];for(let k=0;k<N;k++)order.push(((k*19)+7)%N+1);}
+  renderOrder();requestAnimationFrame(frame);
+}
+try{window.claude&&window.claude.hot&&window.claude.hot.snapshot&&window.claude.hot.snapshot(()=>({order}));}catch(e){}
+(window.claude&&window.claude.hot&&window.claude.hot.ready)?window.claude.hot.ready(boot):boot(window.claude&&window.claude.hot?window.claude.hot.data:null);
+})();
+</script>
+</body>
+</html>
