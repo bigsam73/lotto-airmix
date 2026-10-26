@@ -9,7 +9,10 @@ Shareable Claude artifact: https://claude.ai/artifact/Y17gnniYFi5Rc3AyJusXQi
 
 ## How it works
 
-1. Pick balls 1–45 in the order they go into the machine (type them, fill ascending, or fill shuffled)
+0. (Optional) **Ball setup**: choose the number of balls (8–99) and the number printed on each ball
+   (up to 4 characters, e.g. `101` or `A7`). The setup is saved in the browser; "Lotto default (45)" restores 1–45.
+   The physics and the seed only see ball positions 1…N, so the default 45-ball setup replays exactly as before
+1. Pick the balls in the order they go into the machine (type them, fill ascending, or fill shuffled)
 2. Start the draw → balls drop in through the top tube → 5 s of air mixing
 3. Blower pauses 1.2 s so the funnel empties → blower restarts and the gate opens at the same moment →
    a ball carried up the jet into the inlet funnel and through the throat is drawn, and the gate closes.

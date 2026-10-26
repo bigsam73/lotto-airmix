@@ -91,6 +91,12 @@ h1{font-family:var(--font-display);font-weight:900;font-size:clamp(26px,3.4vw,38
 .chip.picked{opacity:.32;box-shadow:none}
 .chip .o{position:absolute;right:-5px;top:-5px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--fg);color:var(--bg);font:600 10px var(--font-mono);display:grid;place-items:center;opacity:1}
 .chip:disabled{cursor:default;transform:none}
+.chip.long{font-size:10px;letter-spacing:-.02em}
+.setup{display:flex;flex-direction:column;gap:8px}
+.setup label{display:flex;align-items:center;justify-content:space-between;gap:10px;font:600 12.5px var(--font-body);color:var(--fg)}
+.setup input[type=number]{width:84px;font:600 13px var(--font-mono);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.setup .err{color:#ff7272;font:500 12px var(--font-body);min-height:0}
+.setup .err:empty{display:none}
 .c1{background:#fbc400}.c2{background:#69c8f2}.c3{background:#ff7272}.c4{background:#b4b4b4}.c5{background:#b0d840}
 .seq{display:flex;flex-wrap:wrap;gap:4px;min-height:54px;padding:8px;border:1px dashed var(--line);border-radius:10px;align-content:flex-start}
 .seq .mini{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:800 10px var(--font-display);color:#17191c}
@@ -120,7 +126,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 <div class="app">
   <header>
     <div>
-      <p class="eyebrow">Lotto 6/45 · Air-mix · Deterministic rigid-body sim</p>
+      <p class="eyebrow"><span class="gameName">Lotto 6/45</span> · Air-mix · Deterministic rigid-body sim</p>
       <h1>Air-Mix Lotto Draw</h1>
     </div>
     <div class="steps" id="steps">
@@ -149,7 +155,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
         </div>
         <div class="result" id="result" hidden role="dialog" aria-label="Winning numbers">
           <div class="result-card">
-            <span class="result-kicker">Lotto 6/45 · Draw complete</span>
+            <span class="result-kicker"><span class="gameName">Lotto 6/45</span> · Draw complete</span>
             <h3>Winning numbers</h3>
             <div class="bigballs" id="bigballs"></div>
             <span class="result-meta" id="resultMeta"></span>
@@ -174,6 +180,21 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
     </div>
 
     <aside class="panel">
+      <div class="setup">
+        <h2><span class="n">00</span>Ball setup</h2>
+        <p>Choose how many balls go into the machine and what is printed on each one. 7 balls are drawn (6 + bonus).</p>
+        <label for="ballCount">Number of balls <input type="number" id="ballCount" min="8" max="99" step="1" value="45"></label>
+        <label for="ballLabels" style="flex-direction:column;align-items:stretch;gap:6px">Ball numbers (one per ball, comma or line separated, up to 4 characters each)
+          <textarea id="ballLabels" placeholder="e.g. 1, 2, 3 … or 7, 77, 100, A1 …"></textarea>
+        </label>
+        <div class="row">
+          <button class="btn primary" id="setupApply" type="button">Apply ball setup</button>
+          <button class="btn" id="setupSeq" type="button">Number 1…N</button>
+          <button class="btn" id="setupDefault" type="button">Lotto default (45)</button>
+        </div>
+        <div class="err" id="setupErr" role="alert"></div>
+      </div>
+      <hr>
       <div>
         <h2><span class="n">01</span>Ball loading order</h2>
         <p>Tap the balls in the order they go into the machine. This order is the simulation's only input, and its hash seeds the turbulence.</p>
@@ -188,7 +209,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
       <details>
         <summary>Type or copy the order</summary>
         <div class="inner">
-          <textarea id="txt" placeholder="e.g. 7, 23, 1, 45, 12 … (1–45, no repeats)"></textarea>
+          <textarea id="txt" placeholder="e.g. 7, 23, 1, 45, 12 … (ball numbers, no repeats)"></textarea>
           <div class="row"><button class="btn" id="apply">Apply</button><button class="btn" id="copy">Copy current order</button></div>
         </div>
       </details>
@@ -212,7 +233,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
           <li><b>Single seed</b>: the loading order is hashed with 32-bit <code>FNV-1a</code> and seeds every procedural element (loading micro-offsets, turbulence field).</li>
           <li><b>Integer-hash value noise</b> builds the 3D turbulence field. No <code>sin/cos/exp</code>; only <code>imul</code>, basic IEEE arithmetic and <code>sqrt</code>, so results replay identically across browsers.</li>
           <li><b>Air field</b> = central rising jet (rational-function core) + floor inflow + noise turbulence; balls follow it through linear drag <code>a = k(u − v)</code>.</li>
-          <li><b>Collisions</b>: sphere–sphere impulses (<code>e = 0.55</code>) with position correction, glass shell, both faces of the funnel, throat wall, gate lid. No artificial suction: balls leave through air drag and contacts alone. With 45 balls, O(n²) is plenty.</li>
+          <li><b>Collisions</b>: sphere–sphere impulses (<code>e = 0.55</code>) with position correction, glass shell, both faces of the funnel, throat wall, gate lid. No artificial suction: balls leave through air drag and contacts alone. With up to 99 balls, O(n²) is plenty.</li>
           <li><b>Procedural assets</b>: ball textures are drawn on a canvas at runtime, all geometry is primitives. Zero external assets; Three.js is the only dependency.</li>
         </ul>
       </details>
@@ -225,9 +246,20 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 (function(){
 'use strict';
 const $=s=>document.querySelector(s);
-const N=45, DRAW=7;
-const colorOf=n=>n<=10?'#fbc400':n<=20?'#69c8f2':n<=30?'#ff7272':n<=40?'#b4b4b4':'#b0d840';
-const classOf=n=>'c'+(n<=10?1:n<=20?2:n<=30?3:n<=40?4:5);
+const DRAW=7, MINN=DRAW+1, MAXN=99, DEFN=45;
+/* Balls are identified internally by id 1…N (the physics and the seed only ever see ids, so the default
+   45-ball setup replays exactly as before). labels[id-1] is what is printed on the ball. */
+let N=DEFN, labels=seqLabels(DEFN);
+function seqLabels(n){const a=[];for(let i=1;i<=n;i++)a.push(String(i));return a;}
+const labelOf=id=>labels[id-1];
+/* colour bands follow the lotto 1–10 / 11–20 / 21–30 / 31–40 / 41–45 split, scaled to N */
+const bandOf=id=>id<=N*10/45?1:id<=N*20/45?2:id<=N*30/45?3:id<=N*40/45?4:5;
+const BAND_COLORS=['#fbc400','#69c8f2','#ff7272','#b4b4b4','#b0d840'];
+const colorOf=id=>BAND_COLORS[bandOf(id)-1];
+const classOf=id=>'c'+bandOf(id);
+const isDefaultSetup=()=>N===DEFN&&labels.every((l,i)=>l===String(i+1));
+/* sort drawn ids by their printed number when every label is numeric, otherwise by id */
+function sortIds(ids){const num=ids.every(id=>/^\d+$/.test(labelOf(id)));return ids.slice().sort((a,b)=>num?(+labelOf(a)-+labelOf(b))||(a-b):a-b);}
 
 /* ---------- 64k-intro primitives: hash, PRNG-free noise ---------- */
 const fnv1a=a=>{let h=0x811c9dc5;for(let i=0;i<a.length;i++){h^=a[i];h=Math.imul(h,0x01000193);}return h>>>0;};
@@ -380,9 +412,9 @@ const TRAY=new THREE.Vector3(3.5,-3.23,1.55), SLOT_DX=0.74;
 
 const S={
   order:[], seed:0, t:0, steps:0, phase:'idle', inserted:0, mixStart:0, doneAt:0,
-  px:new Float64Array(N),py:new Float64Array(N),pz:new Float64Array(N),
-  vx:new Float64Array(N),vy:new Float64Array(N),vz:new Float64Array(N),
-  st:new Uint8Array(N), exitT:new Float64Array(N), slot:new Int8Array(N),
+  px:new Float64Array(MAXN),py:new Float64Array(MAXN),pz:new Float64Array(MAXN),
+  vx:new Float64Array(MAXN),vy:new Float64Array(MAXN),vz:new Float64Array(MAXN),
+  st:new Uint8Array(MAXN), exitT:new Float64Array(MAXN), slot:new Int8Array(MAXN),
   gateOpen:false, gateTimer:0, drawn:[], air:false, speed:1, acc:0
 };
 
@@ -564,34 +596,36 @@ post.position.set(TRAY.x+SLOT_DX*3,(FLOOR_Y+TRAY.y-BR-0.18)/2,TRAY.z);scene.add(
 
 /* procedural ball textures */
 const texCache=new Map();
-function ballTexture(n){
-  if(texCache.has(n))return texCache.get(n);
+function ballTexture(id){
+  const n=labelOf(id), key=n+'|'+colorOf(id);
+  if(texCache.has(key))return texCache.get(key);
   const c=document.createElement('canvas');c.width=512;c.height=256;const g=c.getContext('2d');
-  g.fillStyle=colorOf(n);g.fillRect(0,0,512,256);
+  g.fillStyle=colorOf(id);g.fillRect(0,0,512,256);
   const grad=g.createLinearGradient(0,0,0,256);grad.addColorStop(0,'rgba(0,0,0,.18)');grad.addColorStop(.5,'rgba(0,0,0,0)');grad.addColorStop(1,'rgba(0,0,0,.25)');
   g.fillStyle=grad;g.fillRect(0,0,512,256);
   for(const cx of [128,384]){
     g.fillStyle='#ffffff';g.beginPath();g.ellipse(cx,128,86,84,0,0,Math.PI*2);g.fill();
-    g.fillStyle='#17191c';g.font='900 92px "Gothic A1","Noto Sans",sans-serif';g.textAlign='center';g.textBaseline='middle';
-    g.fillText(String(n),cx,134);
+    const fs=n.length<=2?92:n.length===3?70:54;
+    g.fillStyle='#17191c';g.font='900 '+fs+'px "Gothic A1","Noto Sans",sans-serif';g.textAlign='center';g.textBaseline='middle';
+    g.fillText(n,cx,134,160);
   }
   const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;t.anisotropy=renderer.capabilities.getMaxAnisotropy();
-  texCache.set(n,t);return t;
+  texCache.set(key,t);return t;
 }
 const ballGeo=new THREE.SphereGeometry(BR,28,20);
 const meshes=[];
-for(let i=0;i<N;i++){
+for(let i=0;i<MAXN;i++){
   const m=new THREE.Mesh(ballGeo,new THREE.MeshStandardMaterial({roughness:0.32,metalness:0}));
   m.castShadow=true;m.visible=false;scene.add(m);meshes.push(m);
 }
-const shown=new Uint8Array(N);
+const shown=new Uint8Array(MAXN);
 const tmpV=new THREE.Vector3(), tmpQ=new THREE.Quaternion(), axis=new THREE.Vector3(), identQ=new THREE.Quaternion();
 const slotPos=k=>tmpV.set(TRAY.x+SLOT_DX*k,TRAY.y,TRAY.z);
 
 function sync(dtv){
   const px=S.px,py=S.py,pz=S.pz,vx=S.vx,vy=S.vy,vz=S.vz,st=S.st;
-  for(let i=0;i<N;i++){
-    const m=meshes[i],s=st[i];
+  for(let i=0;i<MAXN;i++){
+    const m=meshes[i],s=i<N?st[i]:0;
     if(s===0){m.visible=false;continue;}
     m.visible=true;
     if(s===1){
@@ -643,10 +677,13 @@ new ResizeObserver(resize).observe(stage);resize();
 /* ---------- UI ---------- */
 let order=[];
 const grid=$('#grid'),seqEl=$('#seq'),cntEl=$('#cnt'),seedEl=$('#seed'),startBtn=$('#start'),rerunBtn=$('#rerun'),txt=$('#txt');
-for(let n=1;n<=N;n++){
-  const b=document.createElement('button');b.className='chip '+classOf(n);b.type='button';b.dataset.n=n;b.textContent=n;b.setAttribute('aria-label','Ball '+n);
-  b.addEventListener('click',()=>{if(S.phase!=='idle')return;const k=order.indexOf(n);if(k>=0)order.splice(k,1);else order.push(n);renderOrder();});
-  grid.appendChild(b);
+function buildGrid(){
+  grid.innerHTML='';
+  for(let n=1;n<=N;n++){
+    const b=document.createElement('button');b.className='chip '+classOf(n)+(labelOf(n).length>2?' long':'');b.type='button';b.dataset.n=n;b.textContent=labelOf(n);b.setAttribute('aria-label','Ball '+labelOf(n));
+    b.addEventListener('click',()=>{if(S.phase!=='idle')return;const k=order.indexOf(n);if(k>=0)order.splice(k,1);else order.push(n);renderOrder();});
+    grid.appendChild(b);
+  }
 }
 function renderOrder(){
   const editing=S.phase==='idle';
@@ -659,31 +696,33 @@ function renderOrder(){
   });
   seqEl.innerHTML='';
   if(!order.length){const e=document.createElement('span');e.className='empty';e.textContent='No balls loaded yet';seqEl.appendChild(e);}
-  order.forEach(n=>{const m=document.createElement('span');m.className='mini '+classOf(n);m.textContent=n;m.title='#'+(order.indexOf(n)+1);seqEl.appendChild(m);});
+  order.forEach(n=>{const m=document.createElement('span');m.className='mini '+classOf(n);m.textContent=labelOf(n);m.title='#'+(order.indexOf(n)+1);seqEl.appendChild(m);});
   cntEl.textContent=order.length+' / '+N;
-  seedEl.textContent=order.length===N?hex8(fnv1a(order)):'— (needs all 45)';
+  seedEl.textContent=order.length===N?hex8(fnv1a(order)):'— (needs all '+N+')';
   startBtn.disabled=!(editing&&order.length===N);
   rerunBtn.disabled=!(S.phase==='done');
-  ['#fillAsc','#fillRand','#clear','#apply'].forEach(s=>$(s).disabled=!editing);
-  txt.value=order.join(', ');
+  ['#fillAsc','#fillRand','#clear','#apply','#setupApply','#setupSeq','#setupDefault'].forEach(s=>$(s).disabled=!editing);
+  $('#ballCount').disabled=$('#ballLabels').disabled=!editing;
+  txt.value=order.map(labelOf).join(', ');
 }
 $('#fillAsc').addEventListener('click',()=>{for(let n=1;n<=N;n++)if(!order.includes(n))order.push(n);renderOrder();});
 $('#fillRand').addEventListener('click',()=>{const rest=[];for(let n=1;n<=N;n++)if(!order.includes(n))rest.push(n);for(let i=rest.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[rest[i],rest[j]]=[rest[j],rest[i]];}order=order.concat(rest);renderOrder();});
 $('#clear').addEventListener('click',()=>{order=[];renderOrder();});
-$('#apply').addEventListener('click',()=>{const seen=new Set(),out=[];(txt.value.match(/\d+/g)||[]).forEach(s=>{const n=+s;if(n>=1&&n<=N&&!seen.has(n)){seen.add(n);out.push(n);}});order=out;renderOrder();});
-$('#copy').addEventListener('click',e=>{const s=order.join(', ');const b=e.currentTarget;const ok=()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy current order',1200);};
+$('#apply').addEventListener('click',()=>{const seen=new Set(),out=[];splitLabels(txt.value).forEach(s=>{const n=labels.indexOf(s)+1;if(n>=1&&!seen.has(n)){seen.add(n);out.push(n);}});order=out;renderOrder();});
+$('#copy').addEventListener('click',e=>{const s=order.map(labelOf).join(', ');const b=e.currentTarget;const ok=()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy current order',1200);};
   (navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(s).then(ok):Promise.reject()).catch(()=>{txt.focus();txt.select();});});
 
 const slots=[...document.querySelectorAll('#slots .slot')],trayMeta=$('#trayMeta');
 function clearResults(){slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='Drawing…';}
-function fillSlot(k,n){const s=slots[k];s.className='slot filled';s.textContent=n;s.style.background=colorOf(n);}
+function fillSlot(k,n){const s=slots[k];s.className='slot filled';s.textContent=labelOf(n);s.style.background=colorOf(n);}
+const L=ids=>ids.map(labelOf);
 function showResult(k,n){
   fillSlot(k,n);
-  trayMeta.textContent='Draw order '+S.drawn.slice(0,k+1).join(' · ');
+  trayMeta.textContent='Draw order '+L(S.drawn.slice(0,k+1)).join(' · ');
   if(k===DRAW-1){
-    const main=S.drawn.slice(0,6).slice().sort((a,b)=>a-b);
+    const main=sortIds(S.drawn.slice(0,6));
     main.forEach((v,i)=>fillSlot(i,v));fillSlot(6,S.drawn[6]);
-    trayMeta.textContent='Sorted · draw order '+S.drawn.slice(0,6).join(' · ')+' + '+S.drawn[6]+' · seed '+hex8(S.seed);
+    trayMeta.textContent='Sorted · draw order '+L(S.drawn.slice(0,6)).join(' · ')+' + '+labelOf(S.drawn[6])+' · seed '+hex8(S.seed);
     renderOrder();
     showOverlay(main,S.drawn[6]);
   }
@@ -693,12 +732,12 @@ function showResult(k,n){
 const resultEl=$('#result'),bigballs=$('#bigballs'),resultMeta=$('#resultMeta'),shareText=$('#shareText'),shareBtn=$('#shareCopy');
 function showOverlay(main,bonus){
   bigballs.innerHTML='';
-  const add=(n,i,bonus)=>{const b=document.createElement('span');b.className='bigball'+(bonus?' bonus':'');b.style.background=colorOf(n);b.style.animationDelay=(i*0.09)+'s';b.textContent=n;b.setAttribute('aria-label',(bonus?'Bonus ':'')+n);bigballs.appendChild(b);};
+  const add=(n,i,bonus)=>{const b=document.createElement('span');b.className='bigball'+(bonus?' bonus':'');b.style.background=colorOf(n);b.style.animationDelay=(i*0.09)+'s';b.textContent=labelOf(n);if(labelOf(n).length>2)b.style.fontSize='clamp(14px,2.6vw,26px)';b.setAttribute('aria-label',(bonus?'Bonus ':'')+labelOf(n));bigballs.appendChild(b);};
   main.forEach((n,i)=>add(n,i,false));
   const plus=document.createElement('span');plus.className='bigplus';plus.textContent='+';plus.setAttribute('aria-hidden','true');bigballs.appendChild(plus);
   add(bonus,6,true);
-  resultMeta.textContent='Bonus '+bonus+' · draw order '+S.drawn.slice(0,6).join(' · ')+' + '+bonus+' · seed '+hex8(S.seed);
-  shareText.value='Air-Mix Lotto Draw result\nWinning numbers '+main.join(' ')+' + bonus '+bonus+'\nDraw order '+S.drawn.join(' → ')+'\nSeed '+hex8(S.seed)+' · loading order '+S.order.join(',')+'\n'+location.href;
+  resultMeta.textContent='Bonus '+labelOf(bonus)+' · draw order '+L(S.drawn.slice(0,6)).join(' · ')+' + '+labelOf(bonus)+' · seed '+hex8(S.seed);
+  shareText.value='Air-Mix Lotto Draw result ('+N+' balls)\nWinning numbers '+L(main).join(' ')+' + bonus '+labelOf(bonus)+'\nDraw order '+L(S.drawn).join(' → ')+'\nSeed '+hex8(S.seed)+' · loading order '+L(S.order).join(',')+(isDefaultSetup()?'':'\nBall numbers '+labels.join(','))+'\n'+location.href;
   resultEl.classList.remove('fallback');shareBtn.textContent='Copy result';resultEl.hidden=false;
 }
 function hideOverlay(){resultEl.hidden=true;resultEl.classList.remove('fallback');}
@@ -757,13 +796,60 @@ function frame(now){
   SFX.flush(dt);sync(dt*S.speed);updateCamera(dt);renderer.render(scene,camera);hud();
 }
 
+/* ---------- ball setup: count + printed numbers ---------- */
+function splitLabels(text){return text.split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean);}
+/* a fixed example loading order that visits every ball once (step coprime with N; 19 for the default 45) */
+function exampleOrder(){
+  const gcd=(a,b)=>b?gcd(b,a%b):a;let st=19;while(gcd(st,N)!==1)st++;
+  const o=[];for(let k=0;k<N;k++)o.push(((k*st)+7)%N+1);return o;
+}
+const countEl=$('#ballCount'),labelsEl=$('#ballLabels'),setupErr=$('#setupErr');
+countEl.min=MINN;countEl.max=MAXN;
+function renderSetup(){
+  countEl.value=N;labelsEl.value=labels.join(', ');setupErr.textContent='';
+  document.querySelectorAll('.gameName').forEach(e=>e.textContent=isDefaultSetup()?'Lotto 6/45':'6 + 1 of '+N);
+}
+function saveSetup(){try{localStorage.setItem('lotto-setup',JSON.stringify({count:N,labels}));}catch(e){}}
+function validSetup(count,list){
+  if(!Number.isInteger(count)||count<MINN||count>MAXN)return 'Number of balls must be '+MINN+'–'+MAXN+'.';
+  if(list.length!==count)return count+' ball numbers needed, '+list.length+' entered. Use "Number 1…N" to fill them in.';
+  const long=list.find(l=>l.length>4);if(long)return '"'+long+'" is too long (up to 4 characters).';
+  const seen=new Set();for(const l of list){if(seen.has(l))return '"'+l+'" is used twice. Every ball needs a different number.';seen.add(l);}
+  return '';
+}
+function applySetup(count,list){
+  N=count;labels=list.slice();
+  hideOverlay();resetSim();S.order=[];meshes.forEach(m=>m.visible=false);
+  slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='No draw yet';
+  order=exampleOrder();
+  buildGrid();renderSetup();renderOrder();
+}
+/* when the count changes and the list is still a plain 1…n sequence, keep it in step with the count */
+countEl.addEventListener('input',()=>{
+  const c=Math.round(+countEl.value), cur=splitLabels(labelsEl.value);
+  if(c>=1&&c<=MAXN&&cur.every((l,i)=>l===String(i+1)))labelsEl.value=seqLabels(c).join(', ');
+});
+$('#setupSeq').addEventListener('click',()=>{const c=Math.round(+countEl.value);if(c>=1&&c<=MAXN)labelsEl.value=seqLabels(c).join(', ');setupErr.textContent='';});
+$('#setupDefault').addEventListener('click',()=>{if(S.phase!=='idle')return;applySetup(DEFN,seqLabels(DEFN));saveSetup();});
+$('#setupApply').addEventListener('click',()=>{
+  if(S.phase!=='idle')return;
+  const count=Math.round(+countEl.value), list=splitLabels(labelsEl.value), err=validSetup(count,list);
+  if(err){setupErr.textContent=err;return;}
+  applySetup(count,list);saveSetup();
+  $('#note').textContent=N+' balls set up. An example loading order is filled in; clear it and enter your own, or start as is.';
+});
+
 /* boot (hot-update aware) */
 function boot(data){
+  let cfg=data&&data.setup;
+  if(!cfg){try{cfg=JSON.parse(localStorage.getItem('lotto-setup')||'null');}catch(e){cfg=null;}}
+  if(cfg&&Array.isArray(cfg.labels)&&!validSetup(cfg.count,cfg.labels.map(String))){N=cfg.count;labels=cfg.labels.map(String);}
+  buildGrid();renderSetup();
   if(data&&Array.isArray(data.order)&&data.order.length)order=data.order.filter(n=>n>=1&&n<=N).slice(0,N);
-  else {order=[];for(let k=0;k<N;k++)order.push(((k*19)+7)%N+1);}
+  else order=exampleOrder();
   renderOrder();requestAnimationFrame(frame);
 }
-try{window.claude&&window.claude.hot&&window.claude.hot.snapshot&&window.claude.hot.snapshot(()=>({order}));}catch(e){}
+try{window.claude&&window.claude.hot&&window.claude.hot.snapshot&&window.claude.hot.snapshot(()=>({order,setup:{count:N,labels}}));}catch(e){}
 (window.claude&&window.claude.hot&&window.claude.hot.ready)?window.claude.hot.ready(boot):boot(window.claude&&window.claude.hot?window.claude.hot.data:null);
 })();
 </script>
