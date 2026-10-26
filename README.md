@@ -1,8 +1,8 @@
-# Air-Mix Lotto Draw
+# Air-Mix Pict Chance Draw
 
-A web-based 3D physics simulation of a Lotto 6/45 air-mix drawing machine. The only input is the
+A web-based 3D physics simulation of a 6/45 air-mix lottery drawing machine. The only input is the
 **order in which the balls are loaded** into the machine; a fixed-timestep rigid-body simulation then
-draws 6 numbers plus 1 bonus. The same loading order always produces the same numbers.
+draws 6 numbers plus 1 bonus by default (configurable). The same loading order always produces the same numbers.
 
 Demo: open `index.html` in a browser (the only dependency is Three.js r128 from cdnjs).
 Shareable Claude artifact: https://claude.ai/artifact/Y17gnniYFi5Rc3AyJusXQi
@@ -10,13 +10,14 @@ Shareable Claude artifact: https://claude.ai/artifact/Y17gnniYFi5Rc3AyJusXQi
 ## How it works
 
 0. (Optional) **Ball setup**: choose the number of balls (8–99) and the number printed on each ball
-   (up to 4 characters, e.g. `101` or `A7`). The setup is saved in the browser; "Lotto default (45)" restores 1–45.
+   (up to 4 characters, e.g. `101` or `A7`), and how many balls are drawn (1–12 winning balls, with or without
+   a bonus ball). The setup is saved in the browser; "Pict Chance default" restores 6 + 1 of 45.
    The physics and the seed only see ball positions 1…N, so the default 45-ball setup replays exactly as before
 1. Pick the balls in the order they go into the machine (type them, fill ascending, or fill shuffled)
 2. Start the draw → balls drop in through the top tube → 5 s of air mixing
 3. Blower pauses 1.2 s so the funnel empties → blower restarts and the gate opens at the same moment →
    a ball carried up the jet into the inlet funnel and through the throat is drawn, and the gate closes.
-   Repeats 7 times (6 sorted + bonus)
+   Repeats once per drawn ball (default 7: 6 sorted + bonus)
 4. "Draw again with the same order" verifies the replay
 5. When the seventh ball lands, an overlay shows the winning numbers in large type with a copy button
    (numbers, draw order, seed, loading order and page URL)

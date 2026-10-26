@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Air-Mix Lotto Draw</title>
+<title>Air-Mix Pict Chance Draw</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@800;900&family=Noto+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
@@ -95,6 +95,7 @@ h1{font-family:var(--font-display);font-weight:900;font-size:clamp(26px,3.4vw,38
 .setup{display:flex;flex-direction:column;gap:8px}
 .setup label{display:flex;align-items:center;justify-content:space-between;gap:10px;font:600 12.5px var(--font-body);color:var(--fg)}
 .setup input[type=number]{width:84px;font:600 13px var(--font-mono);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.setup input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
 .setup .err{color:#ff7272;font:500 12px var(--font-body);min-height:0}
 .setup .err:empty{display:none}
 .c1{background:#fbc400}.c2{background:#69c8f2}.c3{background:#ff7272}.c4{background:#b4b4b4}.c5{background:#b0d840}
@@ -126,8 +127,8 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 <div class="app">
   <header>
     <div>
-      <p class="eyebrow"><span class="gameName">Lotto 6/45</span> · Air-mix · Deterministic rigid-body sim</p>
-      <h1>Air-Mix Lotto Draw</h1>
+      <p class="eyebrow"><span class="gameName">Pict Chance 6/45</span> · Air-mix · Deterministic rigid-body sim</p>
+      <h1>Air-Mix Pict Chance Draw</h1>
     </div>
     <div class="steps" id="steps">
       <span class="step" data-p="loading"><i></i>Load</span>
@@ -155,7 +156,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
         </div>
         <div class="result" id="result" hidden role="dialog" aria-label="Winning numbers">
           <div class="result-card">
-            <span class="result-kicker"><span class="gameName">Lotto 6/45</span> · Draw complete</span>
+            <span class="result-kicker"><span class="gameName">Pict Chance 6/45</span> · Draw complete</span>
             <h3>Winning numbers</h3>
             <div class="bigballs" id="bigballs"></div>
             <span class="result-meta" id="resultMeta"></span>
@@ -171,9 +172,6 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
       <section class="tray" aria-live="polite">
         <span class="tray-label">Result</span>
         <div class="slots" id="slots">
-          <span class="slot" data-k="0"></span><span class="slot" data-k="1"></span><span class="slot" data-k="2"></span>
-          <span class="slot" data-k="3"></span><span class="slot" data-k="4"></span><span class="slot" data-k="5"></span>
-          <span class="plus">+</span><span class="slot" data-k="6"></span>
         </div>
         <span class="meta" id="trayMeta">No draw yet</span>
       </section>
@@ -182,15 +180,17 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
     <aside class="panel">
       <div class="setup">
         <h2><span class="n">00</span>Ball setup</h2>
-        <p>Choose how many balls go into the machine and what is printed on each one. 7 balls are drawn (6 + bonus).</p>
+        <p>Choose how many balls go into the machine, what is printed on each one, and how many are drawn. Now: <b class="drawDesc">7 balls drawn (6 + bonus)</b>.</p>
         <label for="ballCount">Number of balls <input type="number" id="ballCount" min="8" max="99" step="1" value="45"></label>
+        <label for="drawMain">Balls drawn (winning numbers) <input type="number" id="drawMain" min="1" max="12" step="1" value="6"></label>
+        <label for="drawBonus">Draw 1 extra bonus ball <input type="checkbox" id="drawBonus" checked></label>
         <label for="ballLabels" style="flex-direction:column;align-items:stretch;gap:6px">Ball numbers (one per ball, comma or line separated, up to 4 characters each)
           <textarea id="ballLabels" placeholder="e.g. 1, 2, 3 … or 7, 77, 100, A1 …"></textarea>
         </label>
         <div class="row">
           <button class="btn primary" id="setupApply" type="button">Apply ball setup</button>
           <button class="btn" id="setupSeq" type="button">Number 1…N</button>
-          <button class="btn" id="setupDefault" type="button">Lotto default (45)</button>
+          <button class="btn" id="setupDefault" type="button">Pict Chance default (6 + 1 of 45)</button>
         </div>
         <div class="err" id="setupErr" role="alert"></div>
       </div>
@@ -220,7 +220,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
       <hr>
       <div>
         <h2><span class="n">02</span>Draw</h2>
-        <p>Load → 5 s of air mixing → a ball carried up the jet into the top funnel and through the gate is drawn; the blower pauses and remixes between draws until 7 balls are out (6 + bonus). Fixed timestep, so the same order always yields the same numbers.</p>
+        <p>Load → 5 s of air mixing → a ball carried up the jet into the top funnel and through the gate is drawn; the blower pauses and remixes between draws until <span class="drawDesc">7 balls drawn (6 + bonus)</span>. Fixed timestep, so the same order always yields the same numbers.</p>
       </div>
       <button class="btn primary" id="start" disabled>Start draw</button>
       <button class="btn wide" id="rerun" disabled>Draw again with the same order (verify replay)</button>
@@ -246,7 +246,10 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 (function(){
 'use strict';
 const $=s=>document.querySelector(s);
-const DRAW=7, MINN=DRAW+1, MAXN=99, DEFN=45;
+const MAXN=99, DEFN=45, DEFMAIN=6, MAXMAIN=12;
+/* MAIN winning balls are drawn, then one bonus ball when BONUS is 1; DRAW is the total taken out of the machine */
+let MAIN=DEFMAIN, BONUS=1, DRAW=MAIN+BONUS;
+const minBalls=()=>DRAW+1;
 /* Balls are identified internally by id 1…N (the physics and the seed only ever see ids, so the default
    45-ball setup replays exactly as before). labels[id-1] is what is printed on the ball. */
 let N=DEFN, labels=seqLabels(DEFN);
@@ -258,6 +261,9 @@ const BAND_COLORS=['#fbc400','#69c8f2','#ff7272','#b4b4b4','#b0d840'];
 const colorOf=id=>BAND_COLORS[bandOf(id)-1];
 const classOf=id=>'c'+bandOf(id);
 const isDefaultSetup=()=>N===DEFN&&labels.every((l,i)=>l===String(i+1));
+const isDefaultDraw=()=>MAIN===DEFMAIN&&BONUS===1;
+const drawDesc=()=>DRAW+' ball'+(DRAW>1?'s':'')+' drawn ('+(BONUS?MAIN+' + bonus':'no bonus')+')';
+const gameName=()=>isDefaultSetup()&&isDefaultDraw()?'Pict Chance 6/45':'Pict Chance '+MAIN+(BONUS?' + 1':'')+' of '+N;
 /* sort drawn ids by their printed number when every label is numeric, otherwise by id */
 function sortIds(ids){const num=ids.every(id=>/^\d+$/.test(labelOf(id)));return ids.slice().sort((a,b)=>num?(+labelOf(a)-+labelOf(b))||(a-b):a-b);}
 
@@ -364,7 +370,7 @@ const SFX=(function(){
     burst(0.2,2200,4,0.04,t,pan);
     if(slot>=DRAW-1)fanfare(t+0.25);
   }
-  function fanfare(t){                  /* all seven drawn */
+  function fanfare(t){                  /* all balls drawn */
     const seq=[523.25,659.25,783.99,1046.5], end=t+0.42;
     seq.forEach((f,i)=>tone(0.22,f,0.5,t+i*0.09,0,'triangle'));
     [523.25,659.25,783.99,1046.5,1318.5].forEach(f=>{tone(0.16,f,1.8,end,0,'sine');tone(0.05,f*2,1.2,end,0,'sine');});
@@ -620,7 +626,16 @@ for(let i=0;i<MAXN;i++){
 }
 const shown=new Uint8Array(MAXN);
 const tmpV=new THREE.Vector3(), tmpQ=new THREE.Quaternion(), axis=new THREE.Vector3(), identQ=new THREE.Quaternion();
-const slotPos=k=>tmpV.set(TRAY.x+SLOT_DX*k,TRAY.y,TRAY.z);
+const ROW=7;
+/* slots past the first 7 go to a second row behind, offset by half a slot so they show between the front balls */
+const slotPos=k=>{const r=Math.floor(k/ROW),c=k%ROW;return tmpV.set(TRAY.x+SLOT_DX*(c+r*0.5),TRAY.y,TRAY.z-SLOT_DX*r);};
+function layoutTray(){
+  const rows=Math.ceil(DRAW/ROW);
+  rail.scale.z=(0.9+SLOT_DX*(rows-1))/0.9;rail.position.z=TRAY.z-SLOT_DX*(rows-1)/2;
+  rail.scale.x=rows>1?(SLOT_DX*7.5+0.9)/(SLOT_DX*7+0.9):1;rail.position.x=TRAY.x+SLOT_DX*(rows>1?3.25:3);
+  const c=MAIN%ROW;bar.visible=!!BONUS&&c>0;           /* yellow divider just before the bonus slot */
+  if(bar.visible){const r=Math.floor(MAIN/ROW);bar.position.x=TRAY.x+SLOT_DX*(c-0.5+r*0.5);bar.position.z=TRAY.z-SLOT_DX*r;}
+}
 
 function sync(dtv){
   const px=S.px,py=S.py,pz=S.pz,vx=S.vx,vy=S.vy,vz=S.vz,st=S.st;
@@ -702,7 +717,7 @@ function renderOrder(){
   startBtn.disabled=!(editing&&order.length===N);
   rerunBtn.disabled=!(S.phase==='done');
   ['#fillAsc','#fillRand','#clear','#apply','#setupApply','#setupSeq','#setupDefault'].forEach(s=>$(s).disabled=!editing);
-  $('#ballCount').disabled=$('#ballLabels').disabled=!editing;
+  $('#ballCount').disabled=$('#ballLabels').disabled=$('#drawMain').disabled=$('#drawBonus').disabled=!editing;
   txt.value=order.map(labelOf).join(', ');
 }
 $('#fillAsc').addEventListener('click',()=>{for(let n=1;n<=N;n++)if(!order.includes(n))order.push(n);renderOrder();});
@@ -712,7 +727,14 @@ $('#apply').addEventListener('click',()=>{const seen=new Set(),out=[];splitLabel
 $('#copy').addEventListener('click',e=>{const s=order.map(labelOf).join(', ');const b=e.currentTarget;const ok=()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy current order',1200);};
   (navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(s).then(ok):Promise.reject()).catch(()=>{txt.focus();txt.select();});});
 
-const slots=[...document.querySelectorAll('#slots .slot')],trayMeta=$('#trayMeta');
+let slots=[];const trayMeta=$('#trayMeta');
+function buildSlots(){
+  const box=$('#slots');box.innerHTML='';slots=[];
+  for(let k=0;k<DRAW;k++){
+    if(BONUS&&k===MAIN){const p=document.createElement('span');p.className='plus';p.textContent='+';box.appendChild(p);}
+    const s=document.createElement('span');s.className='slot';s.dataset.k=k;box.appendChild(s);slots.push(s);
+  }
+}
 function clearResults(){slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='Drawing…';}
 function fillSlot(k,n){const s=slots[k];s.className='slot filled';s.textContent=labelOf(n);s.style.background=colorOf(n);}
 const L=ids=>ids.map(labelOf);
@@ -720,11 +742,11 @@ function showResult(k,n){
   fillSlot(k,n);
   trayMeta.textContent='Draw order '+L(S.drawn.slice(0,k+1)).join(' · ');
   if(k===DRAW-1){
-    const main=sortIds(S.drawn.slice(0,6));
-    main.forEach((v,i)=>fillSlot(i,v));fillSlot(6,S.drawn[6]);
-    trayMeta.textContent='Sorted · draw order '+L(S.drawn.slice(0,6)).join(' · ')+' + '+labelOf(S.drawn[6])+' · seed '+hex8(S.seed);
+    const main=sortIds(S.drawn.slice(0,MAIN)), bonus=BONUS?S.drawn[MAIN]:0;
+    main.forEach((v,i)=>fillSlot(i,v));if(bonus)fillSlot(MAIN,bonus);
+    trayMeta.textContent='Sorted · draw order '+L(S.drawn.slice(0,MAIN)).join(' · ')+(bonus?' + '+labelOf(bonus):'')+' · seed '+hex8(S.seed);
     renderOrder();
-    showOverlay(main,S.drawn[6]);
+    showOverlay(main,bonus);
   }
 }
 
@@ -734,10 +756,13 @@ function showOverlay(main,bonus){
   bigballs.innerHTML='';
   const add=(n,i,bonus)=>{const b=document.createElement('span');b.className='bigball'+(bonus?' bonus':'');b.style.background=colorOf(n);b.style.animationDelay=(i*0.09)+'s';b.textContent=labelOf(n);if(labelOf(n).length>2)b.style.fontSize='clamp(14px,2.6vw,26px)';b.setAttribute('aria-label',(bonus?'Bonus ':'')+labelOf(n));bigballs.appendChild(b);};
   main.forEach((n,i)=>add(n,i,false));
-  const plus=document.createElement('span');plus.className='bigplus';plus.textContent='+';plus.setAttribute('aria-hidden','true');bigballs.appendChild(plus);
-  add(bonus,6,true);
-  resultMeta.textContent='Bonus '+labelOf(bonus)+' · draw order '+L(S.drawn.slice(0,6)).join(' · ')+' + '+labelOf(bonus)+' · seed '+hex8(S.seed);
-  shareText.value='Air-Mix Lotto Draw result ('+N+' balls)\nWinning numbers '+L(main).join(' ')+' + bonus '+labelOf(bonus)+'\nDraw order '+L(S.drawn).join(' → ')+'\nSeed '+hex8(S.seed)+' · loading order '+L(S.order).join(',')+(isDefaultSetup()?'':'\nBall numbers '+labels.join(','))+'\n'+location.href;
+  if(bonus){
+    const plus=document.createElement('span');plus.className='bigplus';plus.textContent='+';plus.setAttribute('aria-hidden','true');bigballs.appendChild(plus);
+    add(bonus,MAIN,true);
+  }
+  const order1=L(S.drawn.slice(0,MAIN)).join(' · ')+(bonus?' + '+labelOf(bonus):'');
+  resultMeta.textContent=(bonus?'Bonus '+labelOf(bonus)+' · ':'')+'draw order '+order1+' · seed '+hex8(S.seed);
+  shareText.value='Air-Mix Pict Chance Draw result ('+gameName()+')\nWinning numbers '+L(main).join(' ')+(bonus?' + bonus '+labelOf(bonus):'')+'\nDraw order '+L(S.drawn).join(' → ')+'\nSeed '+hex8(S.seed)+' · loading order '+L(S.order).join(',')+(isDefaultSetup()?'':'\nBall numbers '+labels.join(','))+'\n'+location.href;
   resultEl.classList.remove('fallback');shareBtn.textContent='Copy result';resultEl.hidden=false;
 }
 function hideOverlay(){resultEl.hidden=true;resultEl.classList.remove('fallback');}
@@ -761,7 +786,7 @@ function startDraw(){
 }
 startBtn.addEventListener('click',startDraw);
 rerunBtn.addEventListener('click',()=>{if(S.phase==='done')startDraw();});
-$('#reset').addEventListener('click',()=>{S.phase='idle';resetSim();SFX.ev.length=0;hideOverlay();S.order=[];meshes.forEach(m=>m.visible=false);slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='No draw yet';lid.position.x=0;renderOrder();});
+$('#reset').addEventListener('click',()=>{S.phase='idle';resetSim();SFX.ev.length=0;hideOverlay();S.order=[];meshes.forEach(m=>m.visible=false);buildSlots();trayMeta.textContent='No draw yet';lid.position.x=0;renderOrder();});
 $('#speed').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.speed=+b.dataset.s;[...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed',String(x===b)));});
 
 /* HUD */
@@ -775,7 +800,7 @@ function hud(){
     case 'loading':m='Loading balls · '+S.inserted+' / '+N;break;
     case 'mixing':m='Air mixing · '+Math.max(0,T_MIX-(S.t-S.mixStart)).toFixed(1)+' s left';break;
     case 'drawing':m='Drawing · '+S.drawn.length+' / '+DRAW+(S.gateOpen?' · gate open':S.air?' · gate closed · remixing':' · blower off · balls settling');break;
-    default:m='Draw complete · 6 + 1 bonus';
+    default:m='Draw complete · '+drawDesc();
   }
   if(m!==lastMain){statusMain.textContent=lastMain=m;}
   const tt='t = '+S.t.toFixed(3)+' s · step '+S.steps+' · '+S.speed+'×';
@@ -803,24 +828,28 @@ function exampleOrder(){
   const gcd=(a,b)=>b?gcd(b,a%b):a;let st=19;while(gcd(st,N)!==1)st++;
   const o=[];for(let k=0;k<N;k++)o.push(((k*st)+7)%N+1);return o;
 }
-const countEl=$('#ballCount'),labelsEl=$('#ballLabels'),setupErr=$('#setupErr');
-countEl.min=MINN;countEl.max=MAXN;
+const countEl=$('#ballCount'),labelsEl=$('#ballLabels'),setupErr=$('#setupErr'),mainEl=$('#drawMain'),bonusEl=$('#drawBonus');
+countEl.max=MAXN;mainEl.max=MAXMAIN;
 function renderSetup(){
-  countEl.value=N;labelsEl.value=labels.join(', ');setupErr.textContent='';
-  document.querySelectorAll('.gameName').forEach(e=>e.textContent=isDefaultSetup()?'Lotto 6/45':'6 + 1 of '+N);
+  countEl.value=N;labelsEl.value=labels.join(', ');mainEl.value=MAIN;bonusEl.checked=!!BONUS;countEl.min=minBalls();setupErr.textContent='';
+  document.querySelectorAll('.gameName').forEach(e=>e.textContent=gameName());
+  document.querySelectorAll('.drawDesc').forEach(e=>e.textContent=drawDesc());
 }
-function saveSetup(){try{localStorage.setItem('lotto-setup',JSON.stringify({count:N,labels}));}catch(e){}}
-function validSetup(count,list){
-  if(!Number.isInteger(count)||count<MINN||count>MAXN)return 'Number of balls must be '+MINN+'–'+MAXN+'.';
+function saveSetup(){try{localStorage.setItem('lotto-setup',JSON.stringify({count:N,labels,main:MAIN,bonus:BONUS}));}catch(e){}}
+function validSetup(count,list,main,bonus){
+  if(!Number.isInteger(main)||main<1||main>MAXMAIN)return 'Balls drawn must be 1–'+MAXMAIN+'.';
+  const need=main+bonus+1;
+  if(!Number.isInteger(count)||count<need||count>MAXN)return 'Number of balls must be '+need+'–'+MAXN+' (at least one more than the balls drawn).';
   if(list.length!==count)return count+' ball numbers needed, '+list.length+' entered. Use "Number 1…N" to fill them in.';
   const long=list.find(l=>l.length>4);if(long)return '"'+long+'" is too long (up to 4 characters).';
   const seen=new Set();for(const l of list){if(seen.has(l))return '"'+l+'" is used twice. Every ball needs a different number.';seen.add(l);}
   return '';
 }
-function applySetup(count,list){
-  N=count;labels=list.slice();
+function setDraw(main,bonus){MAIN=main;BONUS=bonus?1:0;DRAW=MAIN+BONUS;buildSlots();layoutTray();}
+function applySetup(count,list,main,bonus){
+  N=count;labels=list.slice();setDraw(main,bonus);
   hideOverlay();resetSim();S.order=[];meshes.forEach(m=>m.visible=false);
-  slots.forEach(s=>{s.className='slot';s.textContent='';s.style.background='';});trayMeta.textContent='No draw yet';
+  trayMeta.textContent='No draw yet';
   order=exampleOrder();
   buildGrid();renderSetup();renderOrder();
 }
@@ -830,26 +859,30 @@ countEl.addEventListener('input',()=>{
   if(c>=1&&c<=MAXN&&cur.every((l,i)=>l===String(i+1)))labelsEl.value=seqLabels(c).join(', ');
 });
 $('#setupSeq').addEventListener('click',()=>{const c=Math.round(+countEl.value);if(c>=1&&c<=MAXN)labelsEl.value=seqLabels(c).join(', ');setupErr.textContent='';});
-$('#setupDefault').addEventListener('click',()=>{if(S.phase!=='idle')return;applySetup(DEFN,seqLabels(DEFN));saveSetup();});
+$('#setupDefault').addEventListener('click',()=>{if(S.phase!=='idle')return;applySetup(DEFN,seqLabels(DEFN),DEFMAIN,1);saveSetup();});
 $('#setupApply').addEventListener('click',()=>{
   if(S.phase!=='idle')return;
-  const count=Math.round(+countEl.value), list=splitLabels(labelsEl.value), err=validSetup(count,list);
+  const count=Math.round(+countEl.value), list=splitLabels(labelsEl.value), main=Math.round(+mainEl.value), bonus=bonusEl.checked?1:0;
+  const err=validSetup(count,list,main,bonus);
   if(err){setupErr.textContent=err;return;}
-  applySetup(count,list);saveSetup();
-  $('#note').textContent=N+' balls set up. An example loading order is filled in; clear it and enter your own, or start as is.';
+  applySetup(count,list,main,bonus);saveSetup();
+  $('#note').textContent=N+' balls set up, '+drawDesc()+'. An example loading order is filled in; clear it and enter your own, or start as is.';
 });
 
 /* boot (hot-update aware) */
 function boot(data){
   let cfg=data&&data.setup;
   if(!cfg){try{cfg=JSON.parse(localStorage.getItem('lotto-setup')||'null');}catch(e){cfg=null;}}
-  if(cfg&&Array.isArray(cfg.labels)&&!validSetup(cfg.count,cfg.labels.map(String))){N=cfg.count;labels=cfg.labels.map(String);}
-  buildGrid();renderSetup();
+  if(cfg&&Array.isArray(cfg.labels)){
+    const main=cfg.main===undefined?DEFMAIN:cfg.main, bonus=cfg.bonus===undefined?1:(cfg.bonus?1:0);  /* older saves had no draw settings */
+    if(!validSetup(cfg.count,cfg.labels.map(String),main,bonus)){N=cfg.count;labels=cfg.labels.map(String);MAIN=main;BONUS=bonus;}
+  }
+  setDraw(MAIN,BONUS);buildGrid();renderSetup();
   if(data&&Array.isArray(data.order)&&data.order.length)order=data.order.filter(n=>n>=1&&n<=N).slice(0,N);
   else order=exampleOrder();
   renderOrder();requestAnimationFrame(frame);
 }
-try{window.claude&&window.claude.hot&&window.claude.hot.snapshot&&window.claude.hot.snapshot(()=>({order,setup:{count:N,labels}}));}catch(e){}
+try{window.claude&&window.claude.hot&&window.claude.hot.snapshot&&window.claude.hot.snapshot(()=>({order,setup:{count:N,labels,main:MAIN,bonus:BONUS}}));}catch(e){}
 (window.claude&&window.claude.hot&&window.claude.hot.ready)?window.claude.hot.ready(boot):boot(window.claude&&window.claude.hot?window.claude.hot.data:null);
 })();
 </script>
